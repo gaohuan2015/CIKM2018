@@ -1,18 +1,80 @@
 import codecs
 
+import torch
+import numpy as np
+
+from torch.autograd import Variable
+
 
 # from gensim.models import KeyedVectors
 
+# load data from .txt file
+def build_data(train_ht_relation, train_hrt_bags, entity_mention_map):
+    # 找出所有一个实体对不止一个关系的数据
+    # for k,v in train_ht_relation.items():
+    #     if len(v) > 1:
+    #         print(k)
+    #         print(v)
 
-def init():
+    # build text data
+    data = list()
+    label = list()
+    pos = list()
+    for key, value in train_hrt_bags.items():
+
+        bag_text = list()
+        bag_pos = list()
+
+        e1, e2, relation = triplet_mention_unpack(key)
+
+        for s_instance in value:
+            s_list = s_instance.split()
+
+            # todo : 根据wikidata的命名 保证每个实体的id与mention是能够对应的
+            if e1 not in entity_mention_map.keys() or e2 not in entity_mention_map.keys():
+                break
+
+            e1_pos = s_list.index(entity_mention_map[e1]) if e1 in s_list else -1
+            e2_pos = s_list.index(entity_mention_map[e2]) if e2 in s_list else -1
+
+            bag_text.append(s_list)
+            bag_pos.append([e1_pos, e2_pos])
+
+        # 出去冗余的数据（有些数据经过处理后有异常）
+        if len(bag_text) <= 0:
+            break
+
+        data.append(bag_text)
+        pos.append(bag_pos)
+        label.append(relation)
+
+    print(data_check(data, label, pos))
+
+    return data, label, pos
+
+
+# transform text data into torch.Tensor format
+def torch_format(data, label, pos):
+    data = torch.LongTensor(np.asarray(data))
+    pos = torch.LongTensor(np.asarray(pos))
+
+    return data, label, pos
+
+
+# load pre-trained word embedding model in .bin or .vec format, and transform it into torch.embedding format
+def load_word_embedding():
     # word2vec
     # word_vectors = KeyedVectors.load_word2vec_format('../data/vec4.bin', binary=True)  # C binary format
     #
     # print(word_vectors.similarity('woman', 'man'))
 
-    sentences = [s for s in codecs.open("../data/test.txt", "r", encoding="utf8").readlines()]
+    return
 
-    print(len(sentences))
+
+# collect INTERMEDIATE data format
+def data_collection(path):
+    sentences = [s for s in codecs.open(path, "r", encoding="utf8").readlines()]
+
     train_ht_relation = dict()  # key:(e1, e2) string value:sentence list
     train_hrt_bags = dict()  # key:(e1, e2, r) string value:sentence list
     train_head_set = dict()  # key(e) string value: tail list
@@ -65,13 +127,34 @@ def init():
             train_tail_set[s_list[1]] = set()
             train_tail_set[s_list[1]].add(s_list[0])
 
-    # 找出所有一个实体对不止一个关系的数据
-    # for k,v in train_ht_relation.items():
-    #     if len(v) > 1:
-    #         print(k)
-    #         print(v)
+    return train_ht_relation, train_hrt_bags, train_head_set, train_tail_set, entity_mention_map
 
-    # build path
+
+def data_check(data, label, pos):
+    return len(data) == len(label) == len(pos) and data_check_bag(data, pos)
+
+
+def data_check_bag(data, pos):
+    if len(data) == len(pos):
+        for i in range(len(data)):
+            if len(data[i]) != len(pos[i]):
+                return False
+
+    return True
+
+
+# load relation to id file
+def relation_id(path):
+    relation2id = dict()
+    for line in codecs.open(path, "r", encoding="utf-8").readlines():
+        relation, id = line.split()
+        relation2id[relation] = id
+
+    return relation2id
+
+
+def build_path(train_ht_relation, train_hrt_bags, entity_mention_map, train_head_set, train_tail_set):
+    # build path data
     train_path = list()
     for mention in train_ht_relation.keys():
         head, tail = entity_mention_unpack(mention)
@@ -113,5 +196,23 @@ def triplet_mention(e1, e2, r):
     return e1 + " " + e2 + " " + r
 
 
+def triplet_mention_unpack(mention):
+    l = mention.split()
+    return l[0], l[1], l[2]
+
+
+# generate the summary report about the data set,
+# todo : 生成一份关于数据集的报告，包含多少个bag，多少种关系，关系的分布，bag中句子数量的分布，word的集合等等
+def report(path):
+    train_ht_relation, train_hrt_bags, _, _, entity_mention_map = data_collection(path)
+
+    return
+
+
 if __name__ == "__main__":
-    init()
+    train_data_path = "../data/train.txt"
+    train_ht_relation, train_hrt_bags, _, _, entity_mention_map = data_collection(train_data_path)
+    data, label, pos = build_data(train_ht_relation, train_hrt_bags, entity_mention_map)
+
+    data, label, pos = torch_format(data, label, pos)
+    print(len(data))
