@@ -39,14 +39,16 @@ def build_data(train_hrt_bags, entity_mention_map, word2id, relation2id, list_si
             id_list = ([word2id[word] if word in word2id.keys() else 0 for word in s_list[5:]] + [0] * list_size)[
                       :list_size]
 
-            e1_pos = s_list.index(e1) # if e1 in s_list else -1
-            e2_pos = s_list.index(e2) # if e2 in s_list else -1
+            e1_pos = s_list.index(e1)  # if e1 in s_list else -1
+            e2_pos = s_list.index(e2)  # if e2 in s_list else -1
 
             # if e1_pos == -1 or e2_pos == -1:
             #     break
 
-            e1_list = ([i - e1_pos + 3 for i in range(len(s_list))] + [len(s_list) - e1_pos + 3] * list_size)[:list_size]
-            e2_list = ([i - e2_pos + 3 for i in range(len(s_list))] + [len(s_list) - e2_pos + 3] * list_size)[:list_size]
+            e1_list = ([i - e1_pos + 3 for i in range(len(s_list))] + [len(s_list) - e1_pos + 3] * list_size)[
+                      :list_size]
+            e2_list = ([i - e2_pos + 3 for i in range(len(s_list))] + [len(s_list) - e2_pos + 3] * list_size)[
+                      :list_size]
 
             bag_text.append(id_list)
             bag_pos1.append(e1_list)
@@ -59,7 +61,7 @@ def build_data(train_hrt_bags, entity_mention_map, word2id, relation2id, list_si
         data.append(bag_text)
         pos1.append(bag_pos1)
         pos2.append(bag_pos2)
-        label.append(relation)
+        label.append(relation2id[relation])
 
     # print(data_check(data, label, pos))
 
@@ -166,7 +168,7 @@ def relation_id(path):
     relation2id = dict()
     for line in codecs.open(path, "r", encoding="utf-8").readlines():
         relation, id = line.split()
-        relation2id[relation] = id
+        relation2id[relation] = int(id)
 
     return relation2id
 
@@ -217,6 +219,28 @@ def triplet_mention(e1, e2, r):
 def triplet_mention_unpack(mention):
     l = mention.split()
     return l[0], l[1], l[2]
+
+
+def to_categorical(y, num_classes=None):
+    """Converts a class vector (integers) to binary class matrix.
+
+    E.g. for use with categorical_crossentropy.
+
+    # Arguments
+        y: class vector to be converted into a matrix
+            (integers from 0 to num_classes).
+        num_classes: total number of classes.
+
+    # Returns
+        A binary matrix representation of the input.
+    """
+    y = np.array(y, dtype='int').ravel()
+    if not num_classes:
+        num_classes = np.max(y) + 1
+    n = y.shape[0]
+    categorical = np.zeros((n, num_classes))
+    categorical[np.arange(n), y] = 1
+    return categorical
 
 
 # generate the summary report about the data set,
