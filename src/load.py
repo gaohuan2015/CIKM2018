@@ -5,11 +5,11 @@ import numpy as np
 
 from torch.autograd import Variable
 
+from gensim.models import KeyedVectors
 
-# from gensim.models import KeyedVectors
 
 # load data from .txt file
-def build_data(train_ht_relation, train_hrt_bags, entity_mention_map):
+def build_data(train_hrt_bags, entity_mention_map, word2id, relation2id, list_size=100):
     # 找出所有一个实体对不止一个关系的数据
     # for k,v in train_ht_relation.items():
     #     if len(v) > 1:
@@ -19,38 +19,51 @@ def build_data(train_ht_relation, train_hrt_bags, entity_mention_map):
     # build text data
     data = list()
     label = list()
-    pos = list()
+    pos1 = list()
+    pos2 = list()
     for key, value in train_hrt_bags.items():
 
         bag_text = list()
-        bag_pos = list()
+        bag_pos1 = list()
+        bag_pos2 = list()
 
         e1, e2, relation = triplet_mention_unpack(key)
 
         for s_instance in value:
             s_list = s_instance.split()
 
+            e1 = s_list[2]
+            e2 = s_list[3]
+
             # todo : 根据wikidata的命名 保证每个实体的id与mention是能够对应的
-            if e1 not in entity_mention_map.keys() or e2 not in entity_mention_map.keys():
-                break
+            id_list = ([word2id[word] if word in word2id.keys() else 0 for word in s_list[5:]] + [0] * list_size)[
+                      :list_size]
 
-            e1_pos = s_list.index(entity_mention_map[e1]) if e1 in s_list else -1
-            e2_pos = s_list.index(entity_mention_map[e2]) if e2 in s_list else -1
+            e1_pos = s_list.index(e1) # if e1 in s_list else -1
+            e2_pos = s_list.index(e2) # if e2 in s_list else -1
 
-            bag_text.append(s_list)
-            bag_pos.append([e1_pos, e2_pos])
+            # if e1_pos == -1 or e2_pos == -1:
+            #     break
+
+            e1_list = ([i - e1_pos + 3 for i in range(len(s_list))] + [len(s_list) - e1_pos + 3] * list_size)[:list_size]
+            e2_list = ([i - e2_pos + 3 for i in range(len(s_list))] + [len(s_list) - e2_pos + 3] * list_size)[:list_size]
+
+            bag_text.append(id_list)
+            bag_pos1.append(e1_list)
+            bag_pos2.append(e2_list)
 
         # 出去冗余的数据（有些数据经过处理后有异常）
         if len(bag_text) <= 0:
             break
 
         data.append(bag_text)
-        pos.append(bag_pos)
+        pos1.append(bag_pos1)
+        pos2.append(bag_pos2)
         label.append(relation)
 
-    print(data_check(data, label, pos))
+    # print(data_check(data, label, pos))
 
-    return data, label, pos
+    return data, label, pos1, pos2
 
 
 # transform text data into torch.Tensor format
@@ -62,13 +75,18 @@ def torch_format(data, label, pos):
 
 
 # load pre-trained word embedding model in .bin or .vec format, and transform it into torch.embedding format
-def load_word_embedding():
+def load_word_embedding(path="../data/vec4.bin"):
     # word2vec
-    # word_vectors = KeyedVectors.load_word2vec_format('../data/vec4.bin', binary=True)  # C binary format
-    #
-    # print(word_vectors.similarity('woman', 'man'))
+    word_vectors = KeyedVectors.load_word2vec_format(path, binary=True)  # C binary format
 
-    return
+    print(word_vectors.similarity('woman', 'man'))
+
+    word2id = dict()
+
+    for word_id, word in enumerate(word_vectors.index2word):
+        word2id[word] = word_id + 1
+
+    return word2id, np.concatenate((np.zeros(word_vectors.vector_size).reshape(1, -1), np.asarray(word_vectors.syn0)))
 
 
 # collect INTERMEDIATE data format
@@ -108,10 +126,10 @@ def data_collection(path):
 
         # fill train (h,r,t) dict
         if triplet_mention(s_list[0], s_list[1], s_list[4]) in train_hrt_bags.keys():
-            train_hrt_bags[triplet_mention(s_list[0], s_list[1], s_list[4])].append(' '.join(s_list[4:]))
+            train_hrt_bags[triplet_mention(s_list[0], s_list[1], s_list[4])].append(s)
         else:
             train_hrt_bags[triplet_mention(s_list[0], s_list[1], s_list[4])] = list()
-            train_hrt_bags[triplet_mention(s_list[0], s_list[1], s_list[4])].append(' '.join(s_list[4:]))
+            train_hrt_bags[triplet_mention(s_list[0], s_list[1], s_list[4])].append(s)
 
         # fill head-tail dict
         if s_list[0] in train_head_set.keys():
@@ -211,8 +229,15 @@ def report(path):
 
 if __name__ == "__main__":
     train_data_path = "../data/train.txt"
-    train_ht_relation, train_hrt_bags, _, _, entity_mention_map = data_collection(train_data_path)
-    data, label, pos = build_data(train_ht_relation, train_hrt_bags, entity_mention_map)
+    relation2id_path = "../data/relation2id.txt"
 
-    data, label, pos = torch_format(data, label, pos)
+    _, train_hrt_bags, _, _, entity_mention_map = data_collection(train_data_path)
+    id2, val = load_word_embedding()
+    relation2id = relation_id(relation2id_path)
+
+    data, label, pos1, pos2 = build_data(train_hrt_bags, entity_mention_map, id2, relation2id)
+
+    # data, label, pos = torch_format(data, label, pos)
     print(len(data))
+
+    print("end")
