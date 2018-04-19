@@ -32,7 +32,6 @@ def train(word2vec, train_bag, train_label, train_pos1, train_pos2):
 
         starttime = datetime.datetime.now()
 
-
         for i in range(len(train_bag)):
             optimizer.zero_grad()
 
@@ -45,7 +44,6 @@ def train(word2vec, train_bag, train_label, train_pos1, train_pos2):
             optimizer.step()
 
             running_loss += loss.data[0]
-
 
             if i % 2000 == 1999:  # print every 2000 mini-batches
                 print('[%d, %5d] loss: %.3f' %
