@@ -1,5 +1,7 @@
 import codecs
 
+import random
+
 import torch
 import numpy as np
 
@@ -292,7 +294,56 @@ def load_all_data():
     return train_bag, train_label, train_pos1, train_pos2, test_bag, test_label, test_pos1, test_pos2
 
 
-if __name__ == "__main__":
-    load_all_data()
+# 对数据进行采样，根据关系的数量，来选定每个关系的比例。
+def data_sample(relation_num=5, NA_ratio=0.1, NA_id=-1):
+    relation2id = relation_id("../data/relation2id.txt")
+    train_bag, train_label, train_pos1, train_pos2, test_bag, test_label, test_pos1, test_pos2 = load_all_data()
 
+    count = [list(train_label).count(int(v)) for _, v in relation2id.items()]
+
+    index = sorted(range(len(count)), key=lambda k: count[k])
+    index.reverse()
+
+    sample_id = index[1:1 + relation_num]
+
+    idx = [i for i in range(len(train_bag)) if int(train_label[i]) in sample_id]
+    NA_idx = [i for i in range(len(train_bag)) if int(train_label[i]) == 99]
+
+    slice = random.sample(NA_idx, int(len(NA_idx) * NA_ratio))
+
+    sample_train = idx + slice
+
+    sample_train_bag = train_bag[sample_train]
+    sample_train_label = train_label[sample_train]
+    sample_train_pos1 = train_pos1[sample_train]
+    sample_train_pos2 = train_pos2[sample_train]
+
+    idx = [i for i in range(len(test_bag)) if int(test_label[i]) in sample_id]
+    NA_idx = [i for i in range(len(test_bag)) if int(test_label[i]) == 99]
+
+    slice = random.sample(NA_idx, int(len(NA_idx) * NA_ratio))
+
+    sample_test = idx + slice
+
+    sample_test_bag = test_bag[sample_test]
+    sample_test_label = test_label[sample_test]
+    sample_test_pos1 = test_pos1[sample_test]
+    sample_test_pos2 = test_pos2[sample_test]
+
+    np.save("../data/sample/train_bag.npy", sample_train_bag)
+    np.save("../data/sample/train_label.npy", sample_train_label)
+    np.save("../data/sample/train_pos1.npy", sample_train_pos1)
+    np.save("../data/sample/train_pos2.npy", sample_train_pos2)
+
+    np.save("../data/sample/test_bag.npy", sample_test_bag)
+    np.save("../data/sample/test_label.npy", sample_test_label)
+    np.save("../data/sample/test_pos1.npy", sample_test_pos1)
+    np.save("../data/sample/test_pos2.npy", sample_test_pos2)
+
+    return sample_train_bag, sample_train_label, sample_train_pos1, sample_train_pos2, \
+           sample_test_bag, sample_test_label, sample_test_pos1, sample_test_pos2
+
+
+if __name__ == "__main__":
+    data_sample()
     print("end")

@@ -1,4 +1,5 @@
 import datetime
+import matplotlib.pyplot as plt
 
 from src import load
 
@@ -6,11 +7,11 @@ import torch
 import numpy as np
 import torch.optim as optim
 
-from src.load import load_word_embedding, relation_id, build_data, data_collection, load_all_data
+from src.load import load_word_embedding, relation_id, build_data, data_collection, load_all_data, to_categorical
 from src.model import Encoder
 
 from torch.autograd import Variable
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, precision_recall_curve, average_precision_score
 
 cuda = torch.cuda.is_available()
 
@@ -22,7 +23,6 @@ if cuda:
 
 def train(word2vec):
     model = Encoder(word2vec)
-
 
     if cuda:
         model.cuda()
@@ -67,29 +67,53 @@ def train(word2vec):
     torch.save(model, "../data/model/sentence_model")
 
 
-def eval(model):
+def eval(model, bag, label, pos1, pos2):
     if cuda:
         model.cuda()
 
     model.eval()
 
+    print('test %d instances with %d NA relation' % (len(bag), list(label).count(99)))
+
     prob = []
-    for i in range(len(test_bag)):
-        outputs = model(Variable(torch.LongTensor(test_bag[i])).cuda(),
-                        Variable(torch.LongTensor(test_pos1[i])).cuda(),
-                        Variable(torch.LongTensor(test_pos2[i])).cuda())
+    for i in range(len(bag)):
+        outputs = model(Variable(torch.LongTensor(bag[i])).cuda(),
+                        Variable(torch.LongTensor(pos1[i])).cuda(),
+                        Variable(torch.LongTensor(pos2[i])).cuda())
 
         prob.append(outputs.data[0].cpu().numpy())
 
     prob = np.asarray(prob)
-    acc = accuracy_score(np.argmax(prob, 1), test_label)
-    print(acc)
+    acc = accuracy_score(np.argmax(prob, 1), label)
+    print('test accuracy ' + str(acc))
+
+    # reshape prob matrix
+    prob = np.reshape(prob[:,:99], (-1))
+    eval_y = np.reshape(to_categorical(label)[:,:99], (-1))
+
+    # order = np.argsort(-prob)
+
+    precision, recall, threshold = precision_recall_curve(eval_y, prob)
+    average_precision = average_precision_score(eval_y, prob)
+    print('test average precision' + str(average_precision))
+
+    plt.plot(recall[:], precision[:], lw=2, color='navy', label='BGRU+2ATT')
+    plt.xlabel('Recall')
+    plt.ylabel('Precision')
+    plt.ylim([0.0, 1.0])
+    plt.xlim([0.0, 0.4])
+    plt.title('Precision-Recall Area={0:0.2f}'.format(average_precision))
+    plt.legend(loc="upper right")
+    plt.grid(True)
+    plt.savefig("../data/img/001.png")
 
     return prob
 
 
 if __name__ == "__main__":
-
     id2, val = load_word_embedding()
 
-    train(val)
+    # train(val)
+
+    model = torch.load("../data/model/sentence_model")
+    eval(model, test_bag, test_label, test_pos1, test_pos2)
