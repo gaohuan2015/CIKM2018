@@ -251,17 +251,48 @@ def report(path):
     return
 
 
-if __name__ == "__main__":
+def init():
     train_data_path = "../data/train.txt"
+    test_data_path = "../data/test.txt"
     relation2id_path = "../data/relation2id.txt"
 
-    _, train_hrt_bags, _, _, entity_mention_map = data_collection(train_data_path)
     id2, val = load_word_embedding()
     relation2id = relation_id(relation2id_path)
 
+    _, train_hrt_bags, _, _, entity_mention_map = data_collection(train_data_path)
     data, label, pos1, pos2 = build_data(train_hrt_bags, entity_mention_map, id2, relation2id)
 
+    np.save("../data/np/train_bag.npy", np.asarray(data))
+    np.save("../data/np/train_label.npy", np.asarray(label))
+    np.save("../data/np/train_pos1.npy", np.asarray(pos1))
+    np.save("../data/np/train_pos2.npy", np.asarray(pos2))
+
     # data, label, pos = torch_format(data, label, pos)
-    print(len(data))
+
+    _, test_hrt_bags, _, _, entity_mention_map = data_collection(test_data_path)
+    data, label, pos1, pos2 = build_data(test_hrt_bags, entity_mention_map, id2, relation2id)
+
+    np.save("../data/np/test_bag.npy", np.asarray(data))
+    np.save("../data/np/test_label.npy", np.asarray(label))
+    np.save("../data/np/test_pos1.npy", np.asarray(pos1))
+    np.save("../data/np/test_pos2.npy", np.asarray(pos2))
+
+
+def load_all_data():
+    train_bag = np.load("../data/np/train_bag.npy")
+    train_label = np.load("../data/np/train_label.npy")
+    train_pos1 = np.load("../data/np/train_pos1.npy")
+    train_pos2 = np.load("../data/np/train_pos2.npy")
+
+    test_bag = np.load("../data/np/test_bag.npy")
+    test_label = np.load("../data/np/test_label.npy")
+    test_pos1 = np.load("../data/np/test_pos1.npy")
+    test_pos2 = np.load("../data/np/test_pos2.npy")
+
+    return train_bag, train_label, train_pos1, train_pos2, test_bag, test_label, test_pos1, test_pos2
+
+
+if __name__ == "__main__":
+    load_all_data()
 
     print("end")

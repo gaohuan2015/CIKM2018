@@ -46,7 +46,7 @@ class Encoder(nn.Module):
         # part1:classifier layer
         self.classifier = nn.Sequential(
             nn.Linear(self.kernel_num, self.relation_num),
-            nn.ReLU()
+            # nn.ReLU()
         )
 
     def forward(self, sentence, pos1, pos2):
@@ -69,7 +69,7 @@ class Encoder(nn.Module):
 
         Out = self.classifier(M)
 
-        return F.softmax(Out, 1)
+        return Out
 
 
 if __name__ == "__main__":
