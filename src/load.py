@@ -172,6 +172,11 @@ def relation_id(path):
         relation, id = line.split()
         relation2id[relation] = int(id)
 
+    tmp = list(relation2id.items())[0][0]
+
+    relation2id[tmp] = 99
+    relation2id["NA"] = 0
+
     return relation2id
 
 
@@ -344,6 +349,16 @@ def data_sample(relation_num=5, NA_ratio=0.1, NA_id=-1):
            sample_test_bag, sample_test_label, sample_test_pos1, sample_test_pos2
 
 
+def shuffle(bag, label, pos1, pos2):
+    index = np.array(len(bag))
+
+    np.shuffle(index)
+
+    return bag[index], label[index], pos1[index], pos2[index]
+
+
 if __name__ == "__main__":
-    data_sample()
+    # data_sample()
+
+    relation_id("../data/relation2id.txt")
     print("end")

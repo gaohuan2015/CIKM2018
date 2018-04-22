@@ -15,7 +15,7 @@ class Encoder(nn.Module):
         self.sentence_representation = 50
         self.bag_size = 20
         self.windows_size = 3
-        self.kernel_num = 64
+        self.kernel_num = 200
         self.vocabulary_size = word2vec.shape[0]
         self.pos_embedding_size = 5
         self.relation_num = 100

@@ -7,7 +7,8 @@ import torch
 import numpy as np
 import torch.optim as optim
 
-from src.load import load_word_embedding, relation_id, build_data, data_collection, load_all_data, to_categorical
+from src.load import load_word_embedding, relation_id, build_data, data_collection, load_all_data, to_categorical, \
+    shuffle
 from src.model import Encoder
 
 from torch.autograd import Variable
@@ -32,12 +33,12 @@ def train(word2vec):
 
     for epoch in range(10):
 
+        train_bag, train_label, train_pos1, train_pos2 = shuffle(train_bag, train_label, train_pos1, train_pos2)
+
         running_loss = 0.0
         print("每个epoch需要多个instance" + str(len(train_bag)))
 
         starttime = datetime.datetime.now()
-
-        eval(model)
 
         for i in range(len(train_bag)):
 
@@ -64,6 +65,8 @@ def train(word2vec):
                 print((endtime - starttime).seconds)
                 starttime = endtime
 
+        eval(model, test_bag, test_label, test_pos1, test_pos2)
+
     torch.save(model, "../data/model/sentence_model")
 
 
@@ -88,8 +91,8 @@ def eval(model, bag, label, pos1, pos2):
     print('test accuracy ' + str(acc))
 
     # reshape prob matrix
-    prob = np.reshape(prob[:,:99], (-1))
-    eval_y = np.reshape(to_categorical(label)[:,:99], (-1))
+    prob = np.reshape(prob[:, :99], (-1))
+    eval_y = np.reshape(to_categorical(label)[:, :99], (-1))
 
     # order = np.argsort(-prob)
 
@@ -113,7 +116,7 @@ def eval(model, bag, label, pos1, pos2):
 if __name__ == "__main__":
     id2, val = load_word_embedding()
 
-    # train(val)
+    train(val)
 
-    model = torch.load("../data/model/sentence_model")
-    eval(model, test_bag, test_label, test_pos1, test_pos2)
+    # model = torch.load("../data/model/sentence_model")
+    # eval(model, test_bag, test_label, test_pos1, test_pos2)
