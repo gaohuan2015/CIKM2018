@@ -1,0 +1,236 @@
+\section{Introduction}
+Knowledge graphs (KGs) are composed of structured information of the real world. They describe entities and relations among them. In a knowledge graph, each fact is represented as a triple $(h, r, t)$, which indicates that there exists a relationship named $r$ between the head entity $h$ and the tail entity $t$, e.g., \emph{(Pablo Picaso, nationality, Spain)}. As the development of KGs in recent years, they are becoming more and more important resources for AI-related tasks, such as question answering and information extraction. However, since KGs are essentially symbolic and logic-based, it is not that tractable or scalable to operate on the original KGs~\cite{DBLP:conf/emnlp/GuoWWWG16}.
+
+\begin{comment}
+Moreover, although a KG may contain huge amount of relational triples, it is far from complete. Knowledge graph completion, which aims at predicting missing data under the supervision of existing KG, has attracted much attention and a few different methods have been proposed.
+
+There are two perspectives to view a KG, one is from the perspective of \textbf{set} and another is from the perspective of \textbf{graph}. The set perspective consider a KG as a set of triples $\mathcal{K}={(h, r, t)}$, in which each fact in the KG is formed as $(h,r,t)$ and indicating that there exists a relation $r \in \mathcal{R}$ between head entity $h \in \mathcal{E}$ and tail entity $t \in \mathcal{E}$, where $\mathcal{E}$ is the set of all entities and $\mathcal{R}$ is the set of all relations in the KG $\mathcal{K}$. This representation is easy to store and manipulate by 'flattening' the KG. The graph perspective treat a KG as a labeled directed graph $\mathcal{K}=(\mathcal{E}, \mathcal{D})$, where $\mathcal{D}\subseteq \mathcal{E} \times \mathcal{R} \times \mathcal{E}$ is a set directed labeled edges in the KG \mathcal{K}.
+\end{comment}
+
+Recently, a new kind of approach named \emph{knowledge graph embedding} (also known as \emph{knowledge representation learning}) has been studied in~\cite{NickelTK11}\cite{SocherCMN13}\cite{BordesUGWY13}\cite{WangZFC14}\cite{LinLSLZ15}. It makes KGs more manageable and performs well on several important tasks like link prediction~\cite{BordesWCB11} and triple classification~\cite{SocherCMN13}. It aims to embed a KG into a low dimensional vector space, where each entity and relation are represented as a vector (also referred to as \emph{embedding}) or a matrix. In general, a KG embedding model defines a score function for evaluating the confidence of a triple, and optimizes an objective function constructed from the score function to learn the embeddings. In this way, symbolic computation can be replaced by numerical computation, which makes it easier to manipulate KGs through linear algebra operations while the semantic information is retained meanwhile. A few typical models of knowledge graph embedding are as follows. TransE~\cite{BordesUGWY13} models a relation as a translation between a pair of entities, which is simple and efficient but can hardly handle complicated relations, like one-to-many, many-to-one and many-to-many relations. To solve this problem, some extensions such as TransH~\cite{WangZFC14} and TransR~\cite{LinLSLZ15} are proposed. They improve the performance on complicated relations based on TransE at the cost of simplicity and efficiency of it. \textsc{HolE}~\cite{NickelRP16} uses a novel compositional operator to capture rich interactions of embeddings.
+% RESCAL~\cite{NickelTK11} models triples via pairwise interactions of embeddings. However it requires a large number of parameters.
+%Other typical models include Structured Embedding (SE)~\cite{BordesWCB11}, Semantic Matching Energy (SME)~\cite{BordesGWB14} and Latent Factor Model (LFM)~\cite{JenattonRBO12}
+
+Most of the existing KG embedding models treat a KG as a set of independent triples during model learning. In this way the information contained in graph structures as well as abounding connections between triples cannot be utilized efficiently. Actually, in the KG, each entity interacts with their neighboring entities through different relations, which can reflect various aspects of the entity and may help model the entity more precisely. What's more, each pair of entities are related through various paths, which is helpful in modeling the correlation of the pair. It motivates us to take the local structures around a triple in the KG into consideration, which is defined as \emph{triple context}. Triple context is made up of two kinds of context: \emph{neighbor context} and \emph{path context}. Neighbor context is the outgoing edges of an entity along with the entities they can reach, which may imply some properties of the entity. Path context is relation paths between a pair of entities, which have been proved to be capable of modeling complex relationships~\cite{LinLLSRL15} and predicting links in KGs~\cite{DBLP:conf/emnlp/LaoMC11}.
+
+There is also works that incorporates graph structures into KG embedding models. PTransE~\cite{LinLLSRL15} is a path-based representation learning model, which utilizes relation paths to improve the performance of TransE. However, it merely uses relation paths in the KG, ignoring other information contained in graph structures. Besides, GAKE~\cite{FengHYZ16}, the most relevant model for our work, leverages three types of graph context for representation learning, in a way similar to learning language models. However, when dealing with contexts, it average the embeddings of all entities and relations in a context as the representation of it, in which way the structural information is still lost. Furthermore, its experimental results are inferior to TransH and TransR. It is a huge challenge in context selection and the feasible use of it.
+
+In this paper, we propose an optimized KG embedding model which utilizes the context of each triple in the knowledge graph. We define triple context consisting of neighbor context and path context, and define a function to evaluate the correlation between a triple and its contexts. Instead of using each triple independently, we incorporate triple context into the score function which is used to evaluate the confidence of a triple. In this way, we make use of a triple context while learning embeddings.
+
+We have conducted preliminary experiment on a benchmark data set and assessed our method on link prediction task by convention. The experimental results show impressive improvements on predictive accuracy compared to other baselines.
+
+
+
+
+\section{Embedding with Triple Context}
+%In this section, we introduce our model that learns embeddings of entities and relations with the help of triple context in the knowledge graph.
+Firstly, we introduce some notations that are used in this paper. Let $\mathcal{K}$ be a knowledge graph, $\mathcal{E}$ and $\mathcal{R}$ the set of all entities and relations respectively in $\mathcal{K}$. Each triple is denoted as $(h, r, t)$, in which $h$ is the head entity, $t$ is the tail entity and $r$ is the relation between $h$ and $t$. The embeddings of each entity and relation are denoted in bold, e.g., $\bm{\mathrm{h}}$ is the embedding of $h$. All the embeddings are in $d$-dimensional space $\mathbb{R}^d$. Our goal is to learn embeddings of all entities and relations, which is denoted as $\Theta$. In the following subsections, we define neighbor context and path context, and then give the framework of our model.
+
+\subsection{Neighbor Context}
+Neighbor context of an entity is the surroundings of it in KG. It is the local structure that interacts most with the entity and can reflect various aspects of the entity. Specifically, given an entity $e$, the neighbor context of $e$ is a set $C_N(e)=\{(r,t)|\forall r, t, (e,r,t)\in\mathcal{K}\}$, where $r$ is an outgoing edge (relation) from $e$ and $t$ is the entity it reaches through $r$. In other words, the neighbor context of $e$ is all the \textit{relation-tail} pairs appearing in triples with $e$ as the head. For example, as shown in Figure~\ref{pic1}, the neighbor context of entity $h$ is $C_N(h)=\{(r_4, e_1), (r_3, e_2), (r_2, e_3), (r_1, e_8), (r_1, e_{10})\}$. We predict the appearance of an entity based on its neighbor context in our model, as a measurement of the compatibility of the entity and its neighbor context.
+
+\begin{figure}
+  \includegraphics[width=0.45\textwidth]{pic1.png}
+  \caption{An illustration of the \emph{triple context} of a triple $(h,r,t)$ in a knowledge graph.}
+  \label{pic1}
+\end{figure}
+
+
+\subsection{Path Context}
+Path context of a pair of entities is the set of paths that starts from an entity to the other in a KG. It is helpful in modeling the relation and capturing interactions between the pair of entities. Given a pair of entities $(h,t)$, the path context of $(h,t)$ is a set $C_P(h,t)=\{p_i | \forall r_{m_1}, \cdots, r_{m_i}, e_1, \cdots, e_{m_i-1},$ $p_i=(r_{m_1}, \cdots, r_{m_i}), (h,r_{m_1},e_1)\in\mathcal{K}, \cdots, (e_{m_i-1}, r_{m_i}, t)\in\mathcal{K}\}$, where $p_i=$ is a list of relations (labeled edges) through which it can traverse from $h$ to $t$, $m_i$ is the length of path $p_i$. In Figure~\ref{pic1}, the path context between $h$ and $t$ is $C_P(h,t) = \{(r_1, r_2), (r_2, r_1, r_2)\}$. We use the path context to predict the tail entity of a triple given the head entity.
+
+
+\subsection{Triple-Context-based Model}
+\begin{comment}
+In general, a KG embedding model defines a score function for evaluating the confidence of a triple, and optimize an objective function constructed from the score function. For example, TransE wants $\bm{\mathrm{h}} + \bm{\mathrm{r}} \approx \bm{\mathrm{t}}$ when $(h,r,t)$ holds, so it defines the score function as
+\begin{equation}\label{TransE_score_function}
+  f(h,r,t)=\|\bm{\mathrm{h}} + \bm{\mathrm{r}} -\bm{\mathrm{t}}\|
+\end{equation}
+which is negative correlation with the confidence of a triple. It could be either the $L_1$ or the $L_2$ norm.\end{comment}
+So far, we have introduced neighbor context and path context, based on which we can define triple context. The triple context of triple $(h,r,t)$ is composed of the neighbor context of the head entity $h$ and the path context of the entity pair $(h,t)$, which can be formalized as:
+\begin{equation}\label{triple context}
+  C(h,r,t) = C_N(h) \cup C_P(h, t)
+\end{equation}
+
+The triple context of a triple can be considered to embody the surrounding structures of it in the graph, which makes the model aware of the information contained in graph structures.
+
+In general KG embedding models, the score function of a triple is only related to the embeddings of entities and relations. For example, TransE defines the score function as $f_{TransE}(h,r,t)=\|\bm{\mathrm{h}} + \bm{\mathrm{r}} -\bm{\mathrm{t}}\|_{L_1/L_2}$. In our method, triple context is introduced in the score function. Given a candidate triple $(h,r,t)$, the score function is the conditional probability that the triple holds given the triple context and all the embeddings, as follows:
+\begin{equation}\label{score_function}
+  f(h,r,t) = P((h,r,t)|C(h,r,t);\Theta)
+\end{equation}
+where $C(h,r,t)$ is the triple context of $(h,r,t)$. A higher score of a triple indicates that it holds to a greater extent.
+
+We define an objective function by maximizing the joint probability of all triples in knowledge graph $\mathcal{K}$, which can be formulated as:
+\begin{align} \label{joint_prob}
+  P(\mathcal{K}|\Theta) &= \prod_{(h,r,t)\in \mathcal{K}} f(h,r,t)
+\end{align}
+
+For the score function in Eq.~\eqref{score_function}, we use conditional probability formula to decompose the probability $P((h,r,t)|C(h,r,t);\Theta)$ as:
+\begin{align} \label{decomposition}
+  \begin{split}
+    f(h,r,t) &= P(h|C(h,r,t);\Theta) \\
+    & \cdot P(t|C(h,r,t),h;\Theta) \\
+    & \cdot P(r|C(h,r,t),h,t;\Theta)
+  \end{split}
+\end{align}
+where the evaluation of the whole triple is decomposed into three parts. The probabilities that $h$, $t$ and $r$ appear given respective condition are determined in turn in these three parts.
+% $h$ is determined first based on triple context, then $t$ is determined based on $h$ and triple context, and finally $r$ likewise.
+
+The first part $P(h|C(h,r,t);\Theta)$ in Eq.~\eqref{decomposition} represents the conditional probability that $h$ is the head entity given the triple context and all the embeddings. Since whether $h$ appears is decided mostly by the neighboring structures of $h$ in the KG, we can approximate $P(h|C(h,r,t);\Theta)$ as $P(h|C_N(h);\Theta)$, where $C_N(h)$ is the \emph{neighbor context} of $h$ in the KG. The approximated probability $P(h|C_N(h);\Theta)$ can be considered as the compatibility between $h$ and its neighbor context, it is formalized as a softmax-like representation, which is also used in~\cite{DBLP:conf/emnlp/WangZFC14} and has been validated, as follows:
+\begin{align} \label{P_h}
+  P(h|C_N(h);\Theta) = \frac{\exp(f_1(h, C_N(h)))}{\sum_{h' \in \mathcal{E}} \exp(f_1(h', C_N(h)))}
+\end{align}
+where $f_1(\cdot, \cdot)$ is the function that describes the correlation between an arbitrary entity $h'$ and entity context of the specific entity $h$. $f_1(h',C_N(h))$ is defined as:
+\begin{equation}\label{f1}
+  f_1(h',C_N(h)) =-\frac{1}{|C_N(h)|}\sum_{(r,t)\in C_N(h)} \|\bm{\mathrm{h'}}+ \bm{\mathrm{r}} - \bm{\mathrm{t}}\|_{L_1/L_2}
+\end{equation}
+where $|C_N(h)|$ is the size of neighbor context $C_N(h)$. Given an entity $h'$ and a pair $(r,t)$ from $C_N(h)$, Eq.~\eqref{f1} uses the score function of TransE to measure the relevance between them, and then take the negative average of all conditions, thus the relevance between $h'$ and $C_N(h)$ is reflected.
+
+The second part $P(t|C(h,r,t),h;\Theta)$ in Eq.~\eqref{decomposition} is the conditional probability that $t$ is the tail entity given the head entity $h$, triple context and all the embeddings. It is the probability that $t$ could be related to $h$ through a potential relation, which can be considered as the relatedness between $h$ and $t$. We use path context between $h$ and $t$ to measure the relatedness of them and approximate $P(t|C(h,r,t),h;\Theta)$ as $P(t|C_P(h,t),h;\Theta)$, where $C_P(h,t)$ is the \emph{path context} between $h$ and $t$. The approximated probability $P(t|C_P(h,t),$ $h;\Theta)$ is formalized as follows:
+\begin{align}\label{P_t}
+  P(t|C_P(h,t),h;\Theta) = \frac{\exp(f_2(t,C_P(h,t)))}{\sum_{t' \in \mathcal{E}} \exp(f_2(t', C_P(h,t)))}
+\end{align}
+where $f_2(\cdot, \cdot)$ is a function of correlation between an arbitrary entity $t'$ and path context of the specific entity pair $(h,t)$, which is formalized as:
+\begin{equation}\label{f2}
+  f_2(t',C_P(h,t)) = -\frac{1}{|C_P(h,t)|}\sum_{p\in C_P(h,t)} \|\bm{\mathrm{h}} + \bm{\mathrm{p}} - \bm{\mathrm{t'}}\|_{L_1/L_2}
+\end{equation}
+where $\bm{\mathrm{p}}$ composes all relations in $p$ into a single vector by summing over all their embeddings. For example, for path $p_i=(r_{m_1}, \cdots, r_{m_i})$, the embedding of it is $\bm{\mathrm{p}}_i = \bm{\mathrm{r}}_{m_1} + \cdots + \bm{\mathrm{r}}_{m_i}$. Eq.~\eqref{f2} has a similar meaning with Eq.~\eqref{f1} and it reflects the relevance between $t'$ and $C_P(h,t)$.
+
+The last part $P(r|C(h,r,t),h,t;\Theta)$ in Eq.~\eqref{decomposition} is the conditional probability describing that relation $r$ holds given the triple context, head entity $h$, tail entity $t$ and all the embeddings. Since $h$ and $t$ have been determined and triple context has been incorporated in the previous two parts, we can omit $C(h,r,t)$ in $P(r|C(h,r,t),h,t;\Theta)$, which is then formulated as follows:
+\begin{align}\label{P_r}
+  P(r|h,t;\Theta) = \frac{\exp(f_3(h,r,t))}{\sum_{r' \in \mathcal{R}} \exp(f_3(h,r',t))}
+\end{align}
+where $f_3(\cdot, \cdot, \cdot)$ is a function indicating the connection between relation $r$ and entity pair $(h,t)$. Here, we use the assumption that $\bm{\mathrm{h}} + \bm{\mathrm{r}} \approx \bm{\mathrm{t}}$ in TransE~\cite{BordesUGWY13} and define function $f_3(h,r,t)$ as:
+\begin{align}\label{f3}
+  f_3(h,r,t) = -\|\bm{\mathrm{h}} + \bm{\mathrm{r}} - \bm{\mathrm{t}}\|_{L_1/L_2}
+\end{align}
+where the minus sign is used to make sure that the value of function $f_3(h,r,t)$ is positive correlation with the confidence of triple $(h,r,t)$.
+
+Thus, Eq.~\eqref{decomposition} can be approximated as:
+\begin{equation}\label{decomposition_approx}
+  f(h,r,t) \approx P(h|C_N(h);\Theta) \cdot P(t|C_P(h,t),h;\Theta) \cdot P(r|h,t;\Theta)
+\end{equation}
+in which way the neighbor context and the path context of a triple are incorporated.
+
+
+\subsection{Model Learning}
+By feasible approximation, the score function is transformed to Eq.~\eqref{decomposition_approx}, each part is represented in softmax form as Eq.~\eqref{P_h}, Eq.~\eqref{P_t} and Eq.~\eqref{P_r}. However, it is impractical to compute these softmax functions directly because of high computational overhead. Hence, we adopt negative sampling, which is proposed in \cite{DBLP:conf/nips/MikolovSCCD13} to approximate full softmax function efficiently, to approximate softmax functions in our model. Taking $P(h|C_N(h);\Theta)$ in Eq.\eqref{P_h} as an example, it is approximated via negative sampling as follows:
+\begin{equation}\label{approximation}
+  %\begin{split}
+    P(h|C_N(h);\Theta) \approx \sigma(f_1(h, C_N(h))) \cdot \prod_{(h',r,t) \in \mathcal{K}'}^{n} \sigma(f_1(h', C_N(h)))
+  %\end{split}
+\end{equation}
+where $\mathcal{K}' = \{h', r, t\}$ is the corrupted triples by replacing the head entity with an arbitrary entity, $n$ is the number of negative samples and $\sigma(\cdot)$ is the logistic function. $P(t|C_P(h,t),h;\Theta)$ in Eq.~\eqref{P_t} and $P(r|h,t;\Theta)$ in Eq.~\eqref{P_r} are approximated likewise.
+
+In real data sets, the size of neighbor context and path context may be very large, which is computationally expensive for model learning. For this reason, we sample from neighbor context and path context to make triple context tractable. Specifically, we set a threshold $n_N$ for neighbor context and $n_P$ for path context; if the size of the original context exceeds the threshold, we sample a subset, size of which is the threshold, for model learning. Moreover, the length of relation path is constrained to 2 and 3 in our model.
+
+For computational convenience, the joint probability in Eq.~\eqref{joint_prob} is transformed to a negative logarithmic loss function, which can be optimized by \emph{stochastic gradient descent} (SGD).
+
+\begin{comment}
+the objective function is formulated as follows:
+\begin{equation}\label{cost_function}
+  \mathcal{L}(\mathcal{K}) = \sum_{(h,r,t)\in\mathcal{K}}
+\end{equation}
+
+For computational convenience, the original joint probability in Eq.~\eqref{joint_prob} is transformed into the negative logarithmic form, which can be optimized by stochastic gradient descent (SGD). The cost function of a triple $(h,r,t)$ is formulated as:
+\begin{equation}\label{score_function}
+*
+\end{equation}
+\end{comment}
+
+
+
+
+\section{Experiments}
+\begin{table*} %\small
+  \centering
+  \caption{Results on FB15k by relation category}
+  \label{table_results_by_relation_category}
+  \begin{tabular}{c|cccc|cccc}
+    \hline
+    Task               & \multicolumn{4}{c|}{Predicting head(\textsc{Hits}@10(\%))} & \multicolumn{4}{c}{Predicting tail(\textsc{Hits}@10(\%))} \\
+    \hline
+    Relation Category  & 1-To-1        & 1-To-N        & N-To-1        & N-To-N        & 1-To-1        & 1-To-N        & N-To-1        & N-To-N \\
+    \hline
+%    SE                 & 35.6          & 62.6          & 17.2          & 37.5          & 34.9          & 14.6          & 68.3          & 41.3   \\
+%    SME(linear)        & 35.1          & 53.7          & 19.0          & 40.3          & 32.7          & 14.9          & 61.6          & 43.3   \\
+%    SME(bilinear)      & 30.9          & 69.6          & 19.9          & 38.6          & 28.2          & 13.1          & 76.0          & 41.8   \\
+    TransE             & 43.7          & 65.7          & 18.2          & 47.2          & 43.7          & 19.7          & 66.7          & 50.0   \\
+    TransH (unif)      & 66.7          & 81.7          & 30.2          & 57.4          & 63.7          & 30.1          & 83.2          & 60.8   \\
+    TransH (bern)      & 66.8          & 87.6          & 28.7          & 64.5          & 65.5          & 39.8          & 83.3          & 67.2   \\
+    TransR (unif)      & 76.9          & 77.9          & 38.1          & 66.9          & 76.2          & 38.4          & 76.2          & 69.1   \\
+    TransR (bern)      & 78.8          & \textbf{89.2} & 34.1          & 69.2          & 79.2          & 37.4          & \textbf{90.4} & 72.1   \\
+    CTransR (unif)     & 78.6          & 77.8          & 36.4          & 68.0          & 77.4          & 37.8          & 78.0          & 70.3   \\
+    CTransR (bern)     & \textbf{81.5} & 89.0          & 34.7          & 71.2          & \textbf{80.8} & 38.6          & 90.1          & 73.8   \\
+    \hline
+    TCE                & 71.0          & 60.3          & \textbf{83.9} & \textbf{81.9} & 70.3          & \textbf{89.9} & 76.0          & \textbf{89.2}   \\
+    \hline
+\end{tabular}
+\end{table*}
+
+
+\subsection{Experimental Setup}
+
+\textbf{\indent Data Set.}
+We use a widely-used benchmark data set FB15k~\cite{BordesUGWY13} for evaluation, which is extracted from Freebase. It has \fnum{592213} triples with \fnum{14951} entities and \fnum{1345} relationships. It is further divided into three parts for model training, tuning and evaluation.
+
+\textbf{Evaluation protocol.}
+Following the same protocol used in \cite{BordesUGWY13}, we use \textit{Mean Rank} and \textit{Hits@10} as evaluation protocals of our model. For each test triple $(h,r,t)$, we replace $h$/$t$ with each entity in $\mathcal{E}$ to generate \emph{corrupted triples} and calculate the scores of each triple using the score function. After ranking the scores in descending order, we then get the rank of the correct entity. \textit{Mean Rank} is the mean of all the predicted ranks, and \textit{Hits@10} denotes the proportion of correct entities ranked in the top 10. Note that, a corrupted triple ranking above a test triple could be valid, which should not be counted as an error. To eliminate the effects of such condition, corrupted triples that already exist in the KG are filtered before ranking. In this case, the setting of evaluation is called "Filter", while the original one is called "Raw". A lower Mean Rank and a higher Hits@10 imply the better performance of a model.
+
+\textbf{Baselines.}
+We use a few outstanding models in recent years as baselines and compare our model with them, including TransE~\cite{BordesUGWY13}, TransH~\cite{WangZFC14}, TransR~\cite{LinLSLZ15} , CTransR~\cite{LinLSLZ15}, PTransE~\cite{LinLLSRL15} and GAKE~\cite{FengHYZ16}.
+
+\begin{table} %\small
+  \caption{Link prediction results}
+  \label{table_link_prediction_results}
+  \begin{tabular}{c|cc|cc}
+    \hline
+    \multirow{2}{*}{Metric}  & \multicolumn{2}{c|}{Mean Rank} & \multicolumn{2}{c}{\textsc{Hits}@10(\%)} \\
+                             & Raw          & Filter          & Raw           & Filter          \\
+    \hline
+%    RESCAL                   & 828          & 683             & 28.4          & 44.1            \\
+%    SE                       & 273          & 162             & 28.8          & 39.8            \\
+%    SME(linear)              & 274          & 154             & 30.7          & 40.8            \\
+%    SME(bilinear)            & 284          & 158             & 31.3          & 41.3            \\
+%    LFM                      & 283          & 164             & 26.0          & 33.1            \\
+    TransE                   & 243          & 125             & 34.9          & 47.1            \\
+    TransH (unif)            & 211          & 84              & 42.5          & 58.5            \\
+    TransH (bern)            & 212          & 87              & 45.7          & 64.4            \\
+    TransR (unif)            & 226          & 78              & 43.8          & 65.5            \\
+    TransR (bern)            & 198          & 77              & 48.2          & 68.7            \\
+    CTransR (unif)           & 233          & 82              & 44.0          & 66.3            \\
+    CTransR (bern)           & 199          & 75              & 48.4          & 70.2            \\
+    PTransE                  & 207          & 58              & 51.4          & \textbf{84.6}   \\
+    GAKE                     & 228          & 119             & 44.5          & 64.8            \\
+    \hline
+    TCE                      & \textbf{110} & \textbf{25}     & \textbf{55.3} & 83.1            \\
+    \hline
+  \end{tabular}
+\end{table}
+
+\textbf{Implementation.}
+We construct the knowledge graph using Apache TinkerPop\footnote{\url{http://tinkerpop.apache.org/}}, an open source graph computing framework. In a few cases, the reverse relation, an edge labeled $r^{-1}$ from $t$ to $h$ for the triple $(h,r,t)$, would be useful when representing some patterns in the graph. For instance, the relation path $a \xrightarrow{motherOf} b \xleftarrow{fatherOf} c$, i.e., $(a, motherOf, b)$ and $(c, fatherOf, b)$, indicates a potential relation $marriedTo$ between $a$ and $c$. Therefore, we add reverse relation of each relation into KG. Specifically, for each edge labeled $r$ from $h$ to $t$ in the graph, we add another edge labeled $r^{-1}$ from $t$ to $h$. In addition, the thresholds of neighbor context and path context are both set to 10.
+
+%For neighbor context generation, it's expensive to consider all the neighbors of each entity in the graph for the reason that there are some entities connecting with a large amount of other entities, which would lead to a huge size of neighbor context. We use sampling to reduce the size of neighbor context. For those entity whose neighbor context size is larger than a fixed size $n$, we sample $n$ neighbors randomly from it's neighbor context. Similarly, a large number of paths between a pair of entities would result in high computational complexity. To solve the problem, firstly, we limit the length of paths by 2-step and 3-step, then, we use random walk to sample $m$ paths between a pair of entities. In our experiment, $n$ and $m$ are all set as 10. Note that for some pairs of entities, there may be no 2 or 3 step relation paths. In such case, we suppose that the relatedness between those pairs of entities are relatively low and the values of $f_2()$ in Eq.~\eqref{f2} are set as -100.
+
+
+We use mini-batch SGD to train our model. We choose the learning rate $\alpha$ of SGD among $\{0.1, 0.01, 0.001\}$, the dimension of embeddings $k$ among $\{50, 75, 100\}$, the batch size $B$ among $\{120, 480,$ $ 960, 1920, 4800\}$. The best parameters are determined by the performance on valid set. The optimal parameters are $\alpha=0.001$, $k=50$ and $B=4800$.
+
+\subsection{Link Prediction}
+Link prediction~\cite{BordesUGWY13} is to predict the missing head or tail entity in a given triple based on training triples. Metrics \textit{Mean Rank} and \textit{Hits@10} are used to measure the performance of our model.
+
+
+We collected the result of link prediction in Table~\ref{table_link_prediction_results}. From the results we can see that, our model outperforms other baselines on most of the metrics significantly and consistently, while slightly worse than PTransE on \textsc{Hits}@10. The result implies that triple contexts do improve the performance on link prediction. Although using similar types of contexts in the graph, GAKE's performance is inferior to our model, which shows the superiority of our framework. Note that the experimental results of \textsc{HolE} are absent here, for it uses a different metric, MRR (Mean Reciprocal rank), instead of \textit{Mean rank} for evaluation. But according to \textit{Hits@10} reported in~\cite{NickelRP16}, the results of our model are better than \textsc{HolE}.
+
+
+
+In Table~\ref{table_results_by_relation_category}, we show separate evaluation results by category of relationships on FB15k. We can see that TCE brings promising improvements on modeling complex relations, such as predicting tail of 1-To-N relations, predicting head of N-To-1 relations and N-To-N relations. Specifically, TCE behaves well when predicting the "N" side of 1-To-N and N-To-1 relations, indicating that valid triples have higher scores than invalid triples in general. In some other simpler scenarios, such as 1-To-1 relations and predicting the "1" side of 1-To-N and N-To-1 relations, the performance of TCE is still acceptable although not so good as some other baselines, such as TransH and TransR. The results suggest that the incorporation of triple context is helpful when handling complex relations, at the cost of precision in modeling simple relations, which seems complementary to some other baselines.
+
+
+
+\section{Conclusion and Future Work}
+In this paper, we proposed TCE, a KG embedding model which is able to take advantages of the triple context in the graph. By defining two kinds of context of a triple and representing them in a unified framework, our model can learn embeddings that are aware of their context. We evaluate our model on link prediction and the experimental results show significant improvements over the major baselines.
+
+In the future, we will research on the following aspects: (1) Conduct experiments on more data sets and tasks to validate our model. (2) Current results show complementarity to some other methods such as TransH, TransR. We would think about a combination of those methods and our model.
+%compare the performance of TCE on different data sets, and analyze the characters of data sets that will make the most of triple context in the graph
+% Among all the contexts of a triple in the KG, some are more important than others and may contain more useful patterns. In future, we would explore a method to extract \textit{key contexts} instead of sampling randomly.
