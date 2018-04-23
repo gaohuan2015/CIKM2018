@@ -49,13 +49,15 @@ class Encoder(nn.Module):
             # nn.ReLU()
         )
 
-    def forward(self, sentence, pos1, pos2):
+        # loss
+        self.lr = nn.CrossEntropyLoss()
+
+    def forward_single(self, sentence, pos1, pos2):
         # 输入的bag 2D-tensor n_sample * sentence_length
 
         word_embedding = self.embedding(sentence).view(-1, 1, self.max_sentence_size, self.word_embedding_size)
         pos1_embedding = self.pos_embedding(pos1).view(-1, 1, self.max_sentence_size, self.pos_embedding_size)
         pos2_embedding = self.pos_embedding(pos2).view(-1, 1, self.max_sentence_size, self.pos_embedding_size)
-
 
         input_embedding = torch.cat((word_embedding, pos1_embedding, pos2_embedding), -1)
 
@@ -70,6 +72,62 @@ class Encoder(nn.Module):
         Out = self.classifier(M)
 
         return Out
+
+    def forward(self, sentence_bag, label_bag, pos1_bag, pos2_bag):
+        self.loss = []
+        prob = []
+
+        for i in range(len(sentence_bag)):
+            outputs = self.forward_single(Variable(torch.LongTensor(sentence_bag[i])).cuda(),
+                                          Variable(torch.LongTensor(pos1_bag[i])).cuda(),
+                                          Variable(torch.LongTensor(pos2_bag[i])).cuda())
+            prob.append(outputs.data[0])
+            target = Variable(torch.LongTensor(np.asarray(label_bag[i]).reshape((1)))).cuda()
+
+            self.loss.append(self.lr(outputs, target))
+
+            if i == 0:
+                self.total_loss = self.loss[i]
+            else:
+                self.total_loss += self.loss[i]
+
+        return self.total_loss, prob
+
+
+class RNNEncoder(nn.Module):
+    def __init__(self, word2vec, hidden_dim):
+        self.hidden_num = hidden_dim
+
+        # hyper-parameters
+        self.word_embedding_size = 50
+        self.sentence_representation = 50
+        self.bag_size = 20
+        self.windows_size = 3
+        self.kernel_num = 200
+        self.vocabulary_size = word2vec.shape[0]
+        self.pos_embedding_size = 5
+        self.relation_num = 100
+        self.max_sentence_size = 100
+        self.pos_size = 123
+
+        self.word_embeddings = nn.Embedding(word2vec.shape[0], self.word_embedding_size)
+
+        self.word_embeddings.weight = nn.Parameter(torch.from_numpy(word2vec))
+
+        self.pos1_embeddings = nn.Embedding(self.pos_size, self.pos_embedding_size)
+        # nn.init.xavier_uniform(self.pos1_embeddings.weight)
+        nn.init.normal(self.pos1_embeddings.weight)
+        self.pos2_embeddings = nn.Embedding(self.pos_size, self.pos_embedding_size)
+        nn.init.normal(self.pos2_embeddings.weight)
+        # nn.init.xavier_uniform(self.pos2_embeddings.weight)
+
+        self.lstm = nn.GRU(self.word_embedding_size + 10, hidden_dim, bidirectional=True, dropout=0.2, batch_first=True)
+
+
+        return
+
+    def forward(self):
+        return
 
 
 if __name__ == "__main__":

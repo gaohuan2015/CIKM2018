@@ -8,7 +8,8 @@ import numpy as np
 import torch.optim as optim
 
 from src.load import load_word_embedding, relation_id, build_data, data_collection, load_all_data, to_categorical, \
-    shuffle
+    shuffle, load_train, load_test
+
 from src.model import Encoder
 
 from torch.autograd import Variable
@@ -16,22 +17,23 @@ from sklearn.metrics import accuracy_score, precision_recall_curve, average_prec
 
 cuda = torch.cuda.is_available()
 
-train_bag, train_label, train_pos1, train_pos2, test_bag, test_label, test_pos1, test_pos2 = load_all_data()
-
 if cuda:
     torch.cuda.manual_seed(1)
 
 
-def train(word2vec):
+def train(word2vec, batch_size=50):
+    train_bag, train_label, train_pos1, train_pos2 = load_train()
+    # test_bag, test_label, test_pos1, test_pos2 = load_test()
+
     model = Encoder(word2vec)
 
     if cuda:
         model.cuda()
-    loss_function = torch.nn.CrossEntropyLoss()
+    # loss_function = torch.nn.CrossEntropyLoss()
 
-    optimizer = optim.SGD(model.parameters(), lr=0.01, )
+    optimizer = optim.SGD(model.parameters(), lr=0.02, )
 
-    for epoch in range(10):
+    for epoch in range(5):
 
         train_bag, train_label, train_pos1, train_pos2 = shuffle(train_bag, train_label, train_pos1, train_pos2)
 
@@ -40,37 +42,38 @@ def train(word2vec):
 
         starttime = datetime.datetime.now()
 
-        for i in range(len(train_bag)):
+        for i in range(int(len(train_bag) / batch_size)):
 
-            outputs = model(Variable(torch.LongTensor(train_bag[i])).cuda(),
-                            Variable(torch.LongTensor(train_pos1[i])).cuda(),
-                            Variable(torch.LongTensor(train_pos2[i])).cuda())
-            target = Variable(torch.LongTensor(np.asarray(train_label[i]).reshape((1)))).cuda()
-            loss = loss_function(outputs, target)
+            optimizer.zero_grad()
+
+            loss, _ = model(train_bag[i * batch_size:(i + 1) * batch_size],
+                            train_label[i * batch_size:(i + 1) * batch_size],
+                            train_pos1[i * batch_size:(i + 1) * batch_size],
+                            train_pos2[i * batch_size:(i + 1) * batch_size])
+            # target = Variable(torch.LongTensor(np.asarray(train_label[i]).reshape((1)))).cuda()
+            # loss = loss_function(outputs, target)
             loss.backward()
-            # optimizer.step()
+            optimizer.step()
 
             running_loss += loss.data[0]
 
-            if (i + 1) % 50 == 0:
-                optimizer.step()
-                optimizer.zero_grad()
-
-            if i % 20000 == 19999:  # print every 2000 mini-batches
+            if i % 100 == 99:  # print every 2000 mini-batches
                 print('[%d, %5d] loss: %.3f' %
-                      (epoch + 1, i + 1, running_loss / 2000))
+                      (epoch + 1, i + 1, running_loss / 100))
                 running_loss = 0.0
 
                 endtime = datetime.datetime.now()
                 print((endtime - starttime).seconds)
                 starttime = endtime
 
-        eval(model, test_bag, test_label, test_pos1, test_pos2)
+                # eval(model, test_bag, test_label, test_pos1, test_pos2)
 
-    torch.save(model, "../data/model/sentence_model")
+                # torch.save(model, "../data/model/sentence_model_%s" % (str(i)))
+
+        torch.save(model, "../data/model/sentence_model_%s" % (str(epoch)))
 
 
-def eval(model, bag, label, pos1, pos2):
+def eval(model, bag, label, pos1, pos2, batch_size=20):
     if cuda:
         model.cuda()
 
@@ -78,26 +81,25 @@ def eval(model, bag, label, pos1, pos2):
 
     print('test %d instances with %d NA relation' % (len(bag), list(label).count(99)))
 
-    prob = []
-    for i in range(len(bag)):
-        outputs = model(Variable(torch.LongTensor(bag[i])).cuda(),
-                        Variable(torch.LongTensor(pos1[i])).cuda(),
-                        Variable(torch.LongTensor(pos2[i])).cuda())
+    allprob = []
 
-        prob.append(outputs.data[0].cpu().numpy())
+    for i in range(int(len(bag) / batch_size) + 1):
+        loss, prob = model(bag[i * batch_size:(i + 1) * batch_size], label[i * batch_size:(i + 1) * batch_size],
+                           pos1[i * batch_size:(i + 1) * batch_size], pos2[i * batch_size:(i + 1) * batch_size])
+        allprob.extend([p.cpu().numpy() for p in prob])
 
-    prob = np.asarray(prob)
-    acc = accuracy_score(np.argmax(prob, 1), label)
+    allprob = np.asarray(allprob)
+    acc = accuracy_score(np.argmax(allprob, 1), label)
     print('test accuracy ' + str(acc))
 
     # reshape prob matrix
-    prob = np.reshape(prob[:, :99], (-1))
+    allprob = np.reshape(allprob[:, :99], (-1))
     eval_y = np.reshape(to_categorical(label)[:, :99], (-1))
 
     # order = np.argsort(-prob)
 
-    precision, recall, threshold = precision_recall_curve(eval_y, prob)
-    average_precision = average_precision_score(eval_y, prob)
+    precision, recall, threshold = precision_recall_curve(eval_y[:len(allprob)], allprob)
+    average_precision = average_precision_score(eval_y[:len(allprob)], allprob)
     print('test average precision' + str(average_precision))
 
     plt.plot(recall[:], precision[:], lw=2, color='navy', label='BGRU+2ATT')
@@ -116,7 +118,8 @@ def eval(model, bag, label, pos1, pos2):
 if __name__ == "__main__":
     id2, val = load_word_embedding()
 
-    train(val)
+    # train(val)
+    test_bag, test_label, test_pos1, test_pos2 = load_test()
 
-    # model = torch.load("../data/model/sentence_model")
-    # eval(model, test_bag, test_label, test_pos1, test_pos2)
+    model = torch.load("../data/model/sentence_model_4")
+    eval(model, test_bag, test_label, test_pos1, test_pos2)
