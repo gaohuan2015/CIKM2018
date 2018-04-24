@@ -14,29 +14,54 @@ import torch.optim as optim
 # print(hello_embed)
 from torch.autograd import Variable
 
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.autograd as autograd
-import numpy as np
+# import torch
+# import torch.nn as nn
+# import torch.nn.functional as F
+# import torch.autograd as autograd
+# import numpy as np
+#
+# # 预测值f(x) 构造样本，神经网络输出层
+# inputs_tensor = torch.FloatTensor([
+#     [10, 2, 1, -2, -3],
+#     [-1, -6, -0, -3, -5],
+#     [-5, 4, 8, 2, 1]
+# ])
+#
+# # 真值y
+# targets_tensor = torch.LongTensor([1, 3, 2])
+# # targets_tensor = torch.LongTensor([1])
+#
+# inputs_variable = autograd.Variable(inputs_tensor, requires_grad=True)
+# targets_variable = autograd.Variable(targets_tensor)
+# print('input tensor(nBatch x nClasses): {}'.format(inputs_tensor.shape))
+# print('target tensor shape: {}'.format(targets_tensor.shape))
+#
+# loss = nn.CrossEntropyLoss()
+# output = loss(inputs_variable, targets_variable)
+# # output.backward()
+# print('pytorch 内部实现的CrossEntropyLoss: {}'.format(output))
 
-# 预测值f(x) 构造样本，神经网络输出层
-inputs_tensor = torch.FloatTensor( [
- [10, 2, 1,-2,-3],
- [-1,-6,-0,-3,-5],
- [-5, 4, 8, 2, 1]
- ])
 
-# 真值y
-targets_tensor = torch.LongTensor([1,3,2])
-# targets_tensor = torch.LongTensor([1])
+#
+# a = torch.ones(25, 300)
+# b = torch.ones(22, 300)
+# c = torch.ones(15, 300)
+# pad_sequence([a, b, c]).size()
+# torch.Size([25, 3, 300])
 
-inputs_variable = autograd.Variable(inputs_tensor, requires_grad=True)
-targets_variable = autograd.Variable(targets_tensor)
-print('input tensor(nBatch x nClasses): {}'.format(inputs_tensor.shape))
-print('target tensor shape: {}'.format(targets_tensor.shape))
 
-loss = nn.CrossEntropyLoss()
-output = loss(inputs_variable, targets_variable)
-# output.backward()
-print('pytorch 内部实现的CrossEntropyLoss: {}'.format(output))
+x = Variable(torch.ones(2, 2), requires_grad=True)
+print(x)
+
+y = x + 2
+print(y)
+
+z = y * y * 3
+out = z.mean()
+
+print(z, out)
+
+
+out.backward()
+
+print("end")
