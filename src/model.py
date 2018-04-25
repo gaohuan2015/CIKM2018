@@ -163,7 +163,6 @@ class RNN(nn.Module):
         nn.init.normal(self.pos2_embeddings.weight)
         # nn.init.xavier_uniform(self.pos2_embeddings.weight)
 
-
         self.lstm = nn.GRU(embedding_dim + 10, hidden_dim, bidirectional=True, dropout=0.2, batch_first=True)
         # self.bilinear=nn.Linear(hidden_dim*2,hidden_dim)
 
