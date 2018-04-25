@@ -1,6 +1,8 @@
 import datetime
 import matplotlib.pyplot as plt
 
+from itertools import chain
+
 from src import load
 
 import torch
@@ -10,7 +12,7 @@ import torch.optim as optim
 from src.load import load_word_embedding, relation_id, build_data, data_collection, load_all_data, to_categorical, \
     shuffle, load_train, load_test, load_word_embedding_txt
 
-from src.model import Encoder
+from src.model import Encoder, RNN
 
 from torch.autograd import Variable
 from sklearn.metrics import accuracy_score, precision_recall_curve, average_precision_score
@@ -25,7 +27,7 @@ def train(word2vec, batch_size=50):
     train_bag, train_label, train_pos1, train_pos2 = load_train()
     # test_bag, test_label, test_pos1, test_pos2 = load_test()
 
-    model = Encoder(word2vec)
+    model = RNN(len(word2vec[0]), 200, len(word2vec), word2vec, 50)
 
     if cuda:
         model.cuda()
@@ -46,10 +48,25 @@ def train(word2vec, batch_size=50):
 
             optimizer.zero_grad()
 
-            loss, _ = model(train_bag[i * batch_size:(i + 1) * batch_size],
-                            train_label[i * batch_size:(i + 1) * batch_size],
-                            train_pos1[i * batch_size:(i + 1) * batch_size],
-                            train_pos2[i * batch_size:(i + 1) * batch_size])
+            batch_word = train_bag[i * batch_size:(i + 1) * batch_size]
+            batch_label = train_label[i * batch_size:(i + 1) * batch_size]
+            batch_pos1 = train_pos1[i * batch_size:(i + 1) * batch_size]
+            batch_pos2 = train_pos2[i * batch_size:(i + 1) * batch_size]
+
+            seq_word = Variable(torch.LongTensor(np.array([s for bag in batch_word for s in bag]))).cuda()
+            # seq_label = np.array([s for bag in batch_label for s in bag])
+            seq_pos1 = Variable(torch.LongTensor(np.array([s for bag in batch_pos1 for s in bag]))).cuda()
+            seq_pos2 = Variable(torch.LongTensor(np.array([s for bag in batch_pos2 for s in bag]))).cuda()
+
+            batch_length = [len(bag) for bag in batch_word]
+            shape = [0]
+            for j in range(len(batch_length)):
+                shape.append(shape[j] + batch_length[j])
+            loss, _, _ = model(seq_word, seq_pos1, seq_pos2, shape, batch_label)
+
+            # print(str(i) + str(loss))
+
+
             # target = Variable(torch.LongTensor(np.asarray(train_label[i]).reshape((1)))).cuda()
             # loss = loss_function(outputs, target)
             loss.backward()
@@ -118,9 +135,8 @@ def eval(model, bag, label, pos1, pos2, batch_size=20):
 if __name__ == "__main__":
     id2, val = load_word_embedding_txt()
 
-    # train(val)
-    test_bag, test_label, test_pos1, test_pos2 = load_test()
-
-    model = torch.load("../data/model/sentence_model_1")
-    eval(model, test_bag, test_label, test_pos1, test_pos2)
-
+    train(val)
+    # test_bag, test_label, test_pos1, test_pos2 = load_test()
+    #
+    # model = torch.load("../data/model/sentence_model_1")
+    # eval(model, test_bag, test_label, test_pos1, test_pos2)
