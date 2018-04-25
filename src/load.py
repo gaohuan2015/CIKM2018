@@ -363,10 +363,10 @@ def load_train():
 
 
 def load_test():
-    test_bag = np.load("../data/np/test_bag.npy")
-    test_label = np.load("../data/np/test_label.npy")
-    test_pos1 = np.load("../data/np/test_pos1.npy")
-    test_pos2 = np.load("../data/np/test_pos2.npy")
+    test_bag = np.load("../data/data/testall_word.npy")
+    test_label = np.load("../data/data/testall_y.npy")
+    test_pos1 = np.load("../data/data/testall_pos1.npy")
+    test_pos2 = np.load("../data/data/testall_pos2.npy")
 
     return test_bag, test_label, test_pos1, test_pos2
 

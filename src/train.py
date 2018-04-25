@@ -66,7 +66,6 @@ def train(word2vec, batch_size=50):
 
             # print(str(i) + str(loss))
 
-
             # target = Variable(torch.LongTensor(np.asarray(train_label[i]).reshape((1)))).cuda()
             # loss = loss_function(outputs, target)
             loss.backward()
@@ -90,33 +89,56 @@ def train(word2vec, batch_size=50):
         torch.save(model, "../data/model/sentence_model_%s" % (str(epoch)))
 
 
-def eval(model, bag, label, pos1, pos2, batch_size=20):
+def eval(model, bag, label, pos1, pos2, batch_size=50):
     if cuda:
         model.cuda()
 
     model.eval()
 
-    print('test %d instances with %d NA relation' % (len(bag), list(label).count(99)))
+    # print('test %d instances with %d NA relation' % (len(bag), list(label).count(99)))
 
     allprob = []
+    alleval = []
 
-    for i in range(int(len(bag) / batch_size) + 1):
-        loss, prob = model(bag[i * batch_size:(i + 1) * batch_size], label[i * batch_size:(i + 1) * batch_size],
-                           pos1[i * batch_size:(i + 1) * batch_size], pos2[i * batch_size:(i + 1) * batch_size])
-        allprob.extend([p.cpu().numpy() for p in prob])
+    for i in range(int(len(bag) / batch_size)):
+
+        batch_word = bag[i * batch_size:(i + 1) * batch_size]
+        batch_label = np.asarray(label[i * batch_size:(i + 1) * batch_size])
+        batch_pos1 = pos1[i * batch_size:(i + 1) * batch_size]
+        batch_pos2 = pos2[i * batch_size:(i + 1) * batch_size]
+
+        seq_word = Variable(torch.LongTensor(np.array([s for bag in batch_word for s in bag]))).cuda()
+        # seq_label = np.array([s for bag in batch_label for s in bag])
+        seq_pos1 = Variable(torch.LongTensor(np.array([s for bag in batch_pos1 for s in bag]))).cuda()
+        seq_pos2 = Variable(torch.LongTensor(np.array([s for bag in batch_pos2 for s in bag]))).cuda()
+
+        batch_length = [len(bag) for bag in batch_word]
+        shape = [0]
+        for j in range(len(batch_length)):
+            shape.append(shape[j] + batch_length[j])
+
+        loss, _, prob = model(seq_word, seq_pos1, seq_pos2, shape, batch_label)
+
+        for single_prob in prob:
+            allprob.append(single_prob[:99])
+        for single_eval in batch_label:
+            alleval.append(single_eval[:99])
+
+    allprob = np.reshape(np.array(allprob), (-1))
+    alleval = np.reshape(np.array(alleval), (-1))
 
     allprob = np.asarray(allprob)
-    acc = accuracy_score(np.argmax(allprob, 1), label)
-    print('test accuracy ' + str(acc))
+    # acc = accuracy_score(np.argmax(allprob, 1), label[:len(allprob)])
+    # print('test accuracy ' + str(acc))
 
     # reshape prob matrix
-    allprob = np.reshape(allprob[:, 1:100], (-1))
-    eval_y = np.reshape(to_categorical(label)[:, 1:100], (-1))
+    # allprob = np.reshape(allprob[:, 1:100], (-1))
+    # eval_y = np.reshape(to_categorical(label)[:, 1:100], (-1))
 
     # order = np.argsort(-prob)
 
-    precision, recall, threshold = precision_recall_curve(eval_y[:len(allprob)], allprob)
-    average_precision = average_precision_score(eval_y[:len(allprob)], allprob)
+    precision, recall, threshold = precision_recall_curve(alleval[:len(allprob)], allprob)
+    average_precision = average_precision_score(alleval[:len(allprob)], allprob)
     print('test average precision' + str(average_precision))
 
     plt.plot(recall[:], precision[:], lw=2, color='navy', label='BGRU+2ATT')
@@ -135,8 +157,9 @@ def eval(model, bag, label, pos1, pos2, batch_size=20):
 if __name__ == "__main__":
     id2, val = load_word_embedding_txt()
 
-    train(val)
-    # test_bag, test_label, test_pos1, test_pos2 = load_test()
+    # train(val)
+    test_bag, test_label, test_pos1, test_pos2 = load_test()
+
     #
-    # model = torch.load("../data/model/sentence_model_1")
-    # eval(model, test_bag, test_label, test_pos1, test_pos2)
+    model = torch.load("../data/model/sentence_model_4")
+    eval(model, test_bag, test_label, test_pos1, test_pos2)
