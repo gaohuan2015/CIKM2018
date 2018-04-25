@@ -47,7 +47,8 @@ def build_data(train_hrt_bags, word2id, relation2id, list_size=70):
             e2 = s_list[3]
 
             # todo : 根据wikidata的命名 保证每个实体的id与mention是能够对应的
-            id_list = ([word2id[word] if word in word2id.keys() else 0 for word in s_list[5:]] + [0] * list_size)[
+            id_list = ([word2id[word] if word in word2id.keys() else len(word2id.keys()) - 2 for word in s_list[5:]] + [
+                len(word2id.keys()) - 1] * list_size)[
                       :list_size]
 
             e1_pos = s_list.index(e1)  # if e1 in s_list else -1
@@ -95,14 +96,42 @@ def load_word_embedding(path="../data/vec4.bin"):
     # word2vec
     word_vectors = KeyedVectors.load_word2vec_format(path, binary=True)  # C binary format
 
-    print(word_vectors.similarity('woman', 'man'))
+    # print(word_vectors.similarity('woman', 'man'))
 
     word2id = dict()
 
     for word_id, word in enumerate(word_vectors.index2word):
         word2id[word] = word_id + 1
 
-    return word2id, np.concatenate((np.zeros(word_vectors.vector_size).reshape(1, -1), np.asarray(word_vectors.syn0)))
+    return word2id, np.concatenate((np.random.normal(size=word_vectors.vector_size, loc=0, scale=0.05).reshape(1, -1),
+                                    np.asarray(word_vectors.syn0)))
+
+
+def load_word_embedding_txt(path="../data/vec.txt"):
+    vec = []
+    word2id = {}
+    f = open(path, 'r', encoding="UTF-8")
+    f.readline()
+    while True:
+        content = f.readline()
+        if content == '':
+            break
+        content = content.strip().split()
+        word2id[content[0]] = len(word2id)
+        content = content[1:]
+        content = [(float)(i) for i in content]
+        vec.append(content)
+    f.close()
+    word2id['UNK'] = len(word2id)
+    word2id['BLANK'] = len(word2id)
+
+    dim = len(vec[0])
+
+    vec.append(np.random.normal(size=dim, loc=0, scale=0.05))
+    vec.append(np.random.normal(size=dim, loc=0, scale=0.05))
+    vec = np.array(vec, dtype=np.float32)
+
+    return word2id, vec
 
 
 # collect INTERMEDIATE data format
@@ -288,7 +317,7 @@ def init():
     test_data_path = "../data/test.txt"
     relation2id_path = "../data/relation2id.txt"
 
-    id2, val = load_word_embedding()
+    id2, val = load_word_embedding_txt()
     relation2id = relation_id(relation2id_path)
 
     _, train_hrt_bags, _, _ = data_collection(train_data_path, relation2id)
@@ -325,10 +354,10 @@ def load_all_data():
 
 
 def load_train():
-    train_bag = np.load("../data/np/train_bag.npy")
-    train_label = np.load("../data/np/train_label.npy")
-    train_pos1 = np.load("../data/np/train_pos1.npy")
-    train_pos2 = np.load("../data/np/train_pos2.npy")
+    train_bag = np.load("../data/data/small_word.npy")
+    train_label = np.load("../data/data/small_y.npy")
+    train_pos1 = np.load("../data/data/small_pos1.npy")
+    train_pos2 = np.load("../data/data/small_pos2.npy")
 
     return train_bag, train_label, train_pos1, train_pos2
 
@@ -403,5 +432,6 @@ def shuffle(bag, label, pos1, pos2):
 if __name__ == "__main__":
     # data_sample()
 
+    # a,b = load_word_embedding()
     init()
     print("end")
