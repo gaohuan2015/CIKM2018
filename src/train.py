@@ -8,7 +8,7 @@ import numpy as np
 import torch.optim as optim
 
 from src.load import load_word_embedding, relation_id, build_data, data_collection, load_all_data, to_categorical, \
-    shuffle, load_train, load_test
+    shuffle, load_train, load_test, load_word_embedding_txt
 
 from src.model import Encoder
 
@@ -31,7 +31,7 @@ def train(word2vec, batch_size=50):
         model.cuda()
     # loss_function = torch.nn.CrossEntropyLoss()
 
-    optimizer = optim.SGD(model.parameters(), lr=0.02, )
+    optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=0.0001)
 
     for epoch in range(5):
 
@@ -93,8 +93,8 @@ def eval(model, bag, label, pos1, pos2, batch_size=20):
     print('test accuracy ' + str(acc))
 
     # reshape prob matrix
-    allprob = np.reshape(allprob[:, :99], (-1))
-    eval_y = np.reshape(to_categorical(label)[:, :99], (-1))
+    allprob = np.reshape(allprob[:, 1:100], (-1))
+    eval_y = np.reshape(to_categorical(label)[:, 1:100], (-1))
 
     # order = np.argsort(-prob)
 
@@ -116,10 +116,11 @@ def eval(model, bag, label, pos1, pos2, batch_size=20):
 
 
 if __name__ == "__main__":
-    id2, val = load_word_embedding()
+    id2, val = load_word_embedding_txt()
 
     # train(val)
     test_bag, test_label, test_pos1, test_pos2 = load_test()
 
-    model = torch.load("../data/model/sentence_model_4")
+    model = torch.load("../data/model/sentence_model_1")
     eval(model, test_bag, test_label, test_pos1, test_pos2)
+
