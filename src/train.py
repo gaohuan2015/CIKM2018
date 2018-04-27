@@ -27,6 +27,7 @@ def train(word2vec, batch_size=50):
     train_bag, train_label, train_pos1, train_pos2 = load_train()
     # test_bag, test_label, test_pos1, test_pos2 = load_test()
 
+    # model = torch.load("../data/model/sentence_model_1")
     model = RNN(len(word2vec[0]), 200, len(word2vec), word2vec, 50)
 
     if cuda:
@@ -120,9 +121,9 @@ def eval(model, bag, label, pos1, pos2, batch_size=50):
         loss, _, prob = model(seq_word, seq_pos1, seq_pos2, shape, batch_label)
 
         for single_prob in prob:
-            allprob.append(single_prob[:99])
+            allprob.append(single_prob[0:99])
         for single_eval in batch_label:
-            alleval.append(single_eval[:99])
+            alleval.append(single_eval[0:99])
 
     allprob = np.reshape(np.array(allprob), (-1))
     alleval = np.reshape(np.array(alleval), (-1))
@@ -155,11 +156,10 @@ def eval(model, bag, label, pos1, pos2, batch_size=50):
 
 
 if __name__ == "__main__":
-    id2, val = load_word_embedding_txt()
+    word2vec = np.load("../data/word2vec.npy")
 
-    # train(val)
+    # train(word2vec)
     test_bag, test_label, test_pos1, test_pos2 = load_test()
 
-    #
-    model = torch.load("../data/model/sentence_model_4")
+    model = torch.load("../data/model/sentence_model_2")
     eval(model, test_bag, test_label, test_pos1, test_pos2)
