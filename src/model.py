@@ -221,7 +221,7 @@ class RNN(nn.Module):
         self.predictions = []
         self.acc = []
 
-        for i in range(self.big_num):
+        for i in range(len(total_shape) - 1):
             sen_repre.append(F.tanh(attention_r[total_shape[i]:total_shape[i + 1]]))
 
             batch_size = total_shape[i + 1] - total_shape[i]

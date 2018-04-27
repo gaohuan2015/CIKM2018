@@ -41,29 +41,46 @@ def build_data(train_hrt_bags, word2id, relation2id, list_size=70):
         e1, e2, relation = key
 
         for s_instance in value:
-            s_list = s_instance.split()
+            s_list = s_instance.strip().split()
 
             e1 = s_list[2]
             e2 = s_list[3]
 
+            sentence = s_list[5:-1]
+
+            e1_pos = sentence.index(e1)  # if e1 in s_list else -1
+            e2_pos = sentence.index(e2)  # if e2 in s_list else -1
+
+            output = []
+
+            for i in range(list_size):
+                word = word2id['BLANK']
+                rel_e1 = pos_embed(i - e1_pos)
+                rel_e2 = pos_embed(i - e2_pos)
+                output.append([word, rel_e1, rel_e2])
+
+            for i in range(min(list_size, len(sentence))):
+                word = 0
+                if sentence[i] not in word2id:
+                    word = word2id['UNK']
+                else:
+                    word = word2id[sentence[i]]
+
+                output[i][0] = word
+
+            id_list = [output[i][0] for i in range(list_size)]
+            e1_list = [output[i][1] for i in range(list_size)]
+            e2_list = [output[i][2] for i in range(list_size)]
+
             # todo : 根据wikidata的命名 保证每个实体的id与mention是能够对应的
-            id_list = ([word2id[word] if word in word2id.keys() else len(word2id.keys()) - 2 for word in s_list[5:]] + [
-                len(word2id.keys()) - 1] * list_size)[
-                      :list_size]
-
-            e1_pos = s_list.index(e1)  # if e1 in s_list else -1
-            e2_pos = s_list.index(e2)  # if e2 in s_list else -1
-
-            # if e1_pos == -1 or e2_pos == -1:
-            #     break
-
+            # id_list = ([word2id[word] if word in word2id.keys() else len(word2id.keys()) - 2 for word in
+            #             s_list[5:-1]] + [
+            #                len(word2id.keys()) - 1] * list_size)[
+            #           :list_size]
+            #
             # todo :考虑一下如果句子不足最大长度 如何padding
-            e1_list = ([pos_embed(i - e1_pos) for i in range(len(s_list))] + [
-                pos_embed(len(s_list) - e1_pos)] * list_size)[
-                      :list_size]
-            e2_list = ([pos_embed(i - e2_pos) for i in range(len(s_list))] + [
-                pos_embed(len(s_list) - e1_pos)] * list_size)[
-                      :list_size]
+            # e1_list = [pos_embed(i - e1_pos) for i in range(list_size)]
+            # e2_list = [pos_embed(i - e2_pos) for i in range(list_size)]
 
             bag_text.append(id_list)
             bag_pos1.append(e1_list)
@@ -130,6 +147,8 @@ def load_word_embedding_txt(path="../data/vec.txt"):
     vec.append(np.random.normal(size=dim, loc=0, scale=0.05))
     vec.append(np.random.normal(size=dim, loc=0, scale=0.05))
     vec = np.array(vec, dtype=np.float32)
+
+    np.save("../data/word2vec.npy", vec)
 
     return word2id, vec
 
@@ -227,8 +246,8 @@ def relation_id(path):
 
     tmp = list(relation2id.items())[0][0]
 
-    relation2id[tmp] = 99
-    relation2id["NA"] = 0
+    # relation2id[tmp] = 99
+    # relation2id["NA"] = 0
 
     return relation2id
 
@@ -322,10 +341,16 @@ def init():
 
     _, train_hrt_bags, _, _ = data_collection(train_data_path, relation2id)
 
+    # f = open("../data/np/train_q&a.txt", "w", encoding="utf-8")
+    #
+    # i = 0
+    # for key, value in train_hrt_bags.items():
+    #     f.write(str(i) + '\t' + str(key[0]) + '\t' + str(key[1]) + '\t' + str(key[2]) + '\n')
+
     data, label, pos1, pos2 = build_data(train_hrt_bags, id2, relation2id)
 
     np.save("../data/np/train_bag.npy", np.asarray(data))
-    np.save("../data/np/train_label.npy", np.asarray(label))
+    np.save("../data/np/train_label.npy", to_categorical(np.asarray(label)))
     np.save("../data/np/train_pos1.npy", np.asarray(pos1))
     np.save("../data/np/train_pos2.npy", np.asarray(pos2))
 
@@ -334,7 +359,7 @@ def init():
     data, label, pos1, pos2 = build_data(test_hrt_bags, id2, relation2id)
 
     np.save("../data/np/test_bag.npy", np.asarray(data))
-    np.save("../data/np/test_label.npy", np.asarray(label))
+    np.save("../data/np/test_label.npy", to_categorical(np.asarray(label)))
     np.save("../data/np/test_pos1.npy", np.asarray(pos1))
     np.save("../data/np/test_pos2.npy", np.asarray(pos2))
 
@@ -354,19 +379,29 @@ def load_all_data():
 
 
 def load_train():
-    train_bag = np.load("../data/data/small_word.npy")
-    train_label = np.load("../data/data/small_y.npy")
-    train_pos1 = np.load("../data/data/small_pos1.npy")
-    train_pos2 = np.load("../data/data/small_pos2.npy")
+    train_bag = np.load("../data/np/train_bag.npy")
+    train_label = np.load("../data/np/train_label.npy")
+    train_pos1 = np.load("../data/np/train_pos1.npy")
+    train_pos2 = np.load("../data/np/train_pos2.npy")
+
+    # train_bag = np.load("../data/data/small_word.npy")
+    # train_label = np.load("../data/data/small_y.npy")
+    # train_pos1 = np.load("../data/data/small_pos1.npy")
+    # train_pos2 = np.load("../data/data/small_pos2.npy")
 
     return train_bag, train_label, train_pos1, train_pos2
 
 
 def load_test():
-    test_bag = np.load("../data/data/testall_word.npy")
-    test_label = np.load("../data/data/testall_y.npy")
-    test_pos1 = np.load("../data/data/testall_pos1.npy")
-    test_pos2 = np.load("../data/data/testall_pos2.npy")
+    test_bag = np.load("../data/np/test_bag.npy")
+    test_label = np.load("../data/np/test_label.npy")
+    test_pos1 = np.load("../data/np/test_pos1.npy")
+    test_pos2 = np.load("../data/np/test_pos2.npy")
+
+    # test_bag = np.load("../data/data/testall_word.npy")
+    # test_label = np.load("../data/data/testall_y.npy")
+    # test_pos1 = np.load("../data/data/testall_pos1.npy")
+    # test_pos2 = np.load("../data/data/testall_pos2.npy")
 
     return test_bag, test_label, test_pos1, test_pos2
 
