@@ -28,6 +28,7 @@ def build_data(train_hrt_bags, word2id, relation2id, list_size=70):
     #         print(v)
 
     # build text data
+    bag2id = list()
     data = list()
     label = list()
     pos1 = list()
@@ -37,6 +38,7 @@ def build_data(train_hrt_bags, word2id, relation2id, list_size=70):
         bag_text = list()
         bag_pos1 = list()
         bag_pos2 = list()
+        bag2id.append(key)
 
         e1, e2, relation = key
 
@@ -97,7 +99,7 @@ def build_data(train_hrt_bags, word2id, relation2id, list_size=70):
 
     # print(data_check(data, label, pos))
 
-    return data, label, pos1, pos2
+    return data, label, pos1, pos2, bag2id
 
 
 # transform text data into torch.Tensor format
@@ -208,18 +210,18 @@ def data_collection(path, relation2id):
             train_hrt_bags[triplet_mention(e1_mention, e2_mention, r_id)].append(s)
 
         # fill head-tail dict
-        if s_list[0] in train_head_set.keys():
-            train_head_set[s_list[0]].add(s_list[1])
+        if e1_mention in train_head_set.keys():
+            train_head_set[e1_mention].add(e2_mention)
         else:
-            train_head_set[s_list[0]] = set()
-            train_head_set[s_list[0]].add(s_list[1])
+            train_head_set[e1_mention] = set()
+            train_head_set[e1_mention].add(e2_mention)
 
         # fill tail-head dict
-        if s_list[1] in train_tail_set.keys():
-            train_tail_set[s_list[1]].add(s_list[0])
+        if e2_mention in train_tail_set.keys():
+            train_tail_set[e2_mention].add(e1_mention)
         else:
-            train_tail_set[s_list[1]] = set()
-            train_tail_set[s_list[1]].add(s_list[0])
+            train_tail_set[e2_mention] = set()
+            train_tail_set[e2_mention].add(e1_mention)
 
     return train_ht_relation, train_hrt_bags, train_head_set, train_tail_set
 
@@ -252,34 +254,49 @@ def relation_id(path):
     return relation2id
 
 
-def build_path(train_ht_relation, train_hrt_bags, entity_mention_map, train_head_set, train_tail_set):
+def build_path(train_ht_relation, train_hrt_bags, train_head_set, train_tail_set, bag2id):
     # build path data
-    train_path = list()
+    train_path = dict()
     for mention in train_ht_relation.keys():
         head, tail = entity_mention_unpack(mention)
+        train_path[(head, tail)] = set()
         for tmp in train_head_set[head]:
             if tmp in train_tail_set[tail]:
-                if train_ht_relation[entity_mention(head, tmp)] == {"NA"} \
-                        or train_ht_relation[entity_mention(tmp, tail)] == {"NA"}:
+                if train_ht_relation[entity_mention(head, tmp)] == {99} \
+                        or train_ht_relation[entity_mention(tmp, tail)] == {99}:
                     continue
-                train_path.append([head, tmp, tail])
 
-    with codecs.open("../data/path_tmp.txt", "w") as f:
-        for head, tmp, tail in train_path:
-            if train_ht_relation[entity_mention(head, tail)] == {"NA"}:
-                continue
-            print(entity_mention_map[head], entity_mention_map[tmp], entity_mention_map[tail])
-            print(train_ht_relation[entity_mention(head, tail)])
-            print(train_ht_relation[entity_mention(head, tmp)])
-            print(train_ht_relation[entity_mention(tmp, tail)])
-            ra = list(train_ht_relation[entity_mention(head, tmp)])[0]
-            rb = list(train_ht_relation[entity_mention(tmp, tail)])[0]
-            for s in train_hrt_bags[triplet_mention(head, tmp, ra)]:
-                print(s)
-            for s in train_hrt_bags[triplet_mention(tmp, tail, rb)]:
-                print(s)
+                train_path[(head, tail)].add(tmp)
 
-    return train_ht_relation
+    path_id = []
+
+    entity2id = dict()
+
+    count = 0
+    for e1, e2, relation in bag2id:
+        entity2id[(e1, e2)] = count
+        count += 1
+
+    with codecs.open("../data/path/path_tmp.txt", "w") as f:
+
+        i = 0
+        for e1, e2, relation in bag2id:
+            line = str(i) + '\t' + str(e1) + '\t' + str(e2) + '\t' + str(relation) + '\t'
+            if len(train_path[(e1, e2)]) > 0:
+                line += str('\t'.join(list(train_path[(e1, e2)])))
+                tmp = list(train_path[(e1, e2)])[0]
+                path_id.append([entity2id[e1, tmp] if (e1, tmp) in entity2id.keys() else -1,
+                                entity2id[tmp, e2] if (tmp, e2) in entity2id.keys() else -1])
+            else:
+                path_id.append([-1, -1])
+
+            f.write(line)
+            f.write("\n")
+            i += 1
+
+    np.save("../data/np/path.npy", np.array(path_id))
+
+    return path_id
 
 
 def entity_mention(e1, e2):
@@ -288,7 +305,7 @@ def entity_mention(e1, e2):
 
 # todo:path need to redesign
 def entity_mention_unpack(mention):
-    l = mention.split()
+    l = mention
     return l[0], l[1]
 
 
@@ -297,7 +314,7 @@ def triplet_mention(e1, e2, r):
 
 
 def triplet_mention_unpack(mention):
-    l = mention.split()
+    l = mention
     return l[0], l[1], l[2]
 
 
@@ -339,7 +356,7 @@ def init():
     id2, val = load_word_embedding_txt()
     relation2id = relation_id(relation2id_path)
 
-    _, train_hrt_bags, _, _ = data_collection(train_data_path, relation2id)
+    train_ht_relation, train_hrt_bags, train_head_set, train_tail_set = data_collection(train_data_path, relation2id)
 
     # f = open("../data/np/train_q&a.txt", "w", encoding="utf-8")
     #
@@ -347,7 +364,62 @@ def init():
     # for key, value in train_hrt_bags.items():
     #     f.write(str(i) + '\t' + str(key[0]) + '\t' + str(key[1]) + '\t' + str(key[2]) + '\n')
 
-    data, label, pos1, pos2 = build_data(train_hrt_bags, id2, relation2id)
+    data, label, pos1, pos2, bag2id = build_data(train_hrt_bags, id2, relation2id)
+
+    path_id = build_path(train_ht_relation, train_hrt_bags, train_head_set, train_tail_set, bag2id)
+
+    fake_bag = [[id2["UNK"] for _ in range(70)]]
+    fake_label = to_categorical([relation2id["NA"]], 100)
+    fake_pos1 = [[pos_embed(i) for i in range(70)]]
+    fake_pos2 = [[pos_embed(i) for i in range(70)]]
+
+    pa_bag = []
+    pa_label = []
+    pa_pos1 = []
+    pa_pos2 = []
+
+    pb_bag = []
+    pb_label = []
+    pb_pos1 = []
+    pb_pos2 = []
+
+    for i in range(len(data)):
+        p1 = path_id[i][0]
+        p2 = path_id[i][1]
+
+        if p1 == -1:
+            pa_bag.append(fake_bag)
+            pa_label.append(fake_label)
+            pa_pos1.append(fake_pos1)
+            pa_pos2.append(fake_pos2)
+
+        else:
+            pa_bag.append(data[p1])
+            pa_label.append(to_categorical(label[p1], 100))
+            pa_pos1.append(pos1[p1])
+            pa_pos2.append(pos2[p1])
+
+        if p2 == -1:
+            pb_bag.append(fake_bag)
+            pb_label.append(fake_label)
+            pb_pos1.append(fake_pos1)
+            pb_pos2.append(fake_pos2)
+
+        else:
+            pb_bag.append(data[p2])
+            pb_label.append(to_categorical(label[p2], 100))
+            pb_pos1.append(pos1[p2])
+            pb_pos2.append(pos2[p2])
+
+    np.save("../data/np/train_pa_bag.npy", pa_bag)
+    np.save("../data/np/train_pa_label.npy", pa_label)
+    np.save("../data/np/train_pa_pos1.npy", pa_pos1)
+    np.save("../data/np/train_pa_pos2.npy", pa_pos2)
+
+    np.save("../data/np/train_pb_bag.npy", pb_bag)
+    np.save("../data/np/train_pb_label.npy", pb_label)
+    np.save("../data/np/train_pb_pos1.npy", pb_pos1)
+    np.save("../data/np/train_pb_pos2.npy", pb_pos2)
 
     np.save("../data/np/train_bag.npy", np.asarray(data))
     np.save("../data/np/train_label.npy", to_categorical(np.asarray(label)))
@@ -356,7 +428,7 @@ def init():
 
     _, test_hrt_bags, _, _ = data_collection(test_data_path, relation2id)
 
-    data, label, pos1, pos2 = build_data(test_hrt_bags, id2, relation2id)
+    data, label, pos1, pos2, bag2id = build_data(test_hrt_bags, id2, relation2id)
 
     np.save("../data/np/test_bag.npy", np.asarray(data))
     np.save("../data/np/test_label.npy", to_categorical(np.asarray(label)))
@@ -390,6 +462,20 @@ def load_train():
     # train_pos2 = np.load("../data/data/small_pos2.npy")
 
     return train_bag, train_label, train_pos1, train_pos2
+
+
+def load_train_path():
+    pa_bag = np.load("../data/np/train_pa_bag.npy")
+    pa_label = np.load("../data/np/train_pa_label.npy")
+    pa_pos1 = np.load("../data/np/train_pa_pos1.npy")
+    pa_pos2 = np.load("../data/np/train_pa_pos2.npy")
+
+    pb_bag = np.load("../data/np/train_pb_bag.npy", )
+    pb_label = np.load("../data/np/train_pb_label.npy", )
+    pb_pos1 = np.load("../data/np/train_pb_pos1.npy", )
+    pb_pos2 = np.load("../data/np/train_pb_pos2.npy", )
+
+    return pa_bag, pa_label, pa_pos1, pa_pos2, pb_bag, pb_label, pb_pos1, pb_pos2
 
 
 def load_test():
