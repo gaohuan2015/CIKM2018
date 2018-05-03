@@ -150,6 +150,20 @@ class Encoder(nn.Module):
 class RNN(nn.Module):
     def __init__(self, embedding_dim, hidden_dim, vocab_size, pre_emb, big_num):
         super(RNN, self).__init__()
+
+        # hyper-parameters
+        self.word_embedding_size = 50
+        self.sentence_representation = 50
+        self.bag_size = 20
+        self.windows_size = 3
+        self.kernel_num = 200
+        self.vocabulary_size = pre_emb.shape[0]
+        self.pos_embedding_size = 5
+        self.relation_num = 100
+        self.max_sentence_size = 70
+        self.pos_size = 120
+        self.hidden_dim = 200
+
         self.big_num = big_num
         self.hidden_dim = hidden_dim
 
@@ -187,17 +201,17 @@ class RNN(nn.Module):
 
         self.ls = nn.BCEWithLogitsLoss()
 
-    def forward(self, sentence, pos1, pos2, total_shape, y_batch):
-        total_num = total_shape[-1]
-        # print('totalnum=',total_num)
-        # self.hidden = self.init_hidden(total_num)
+    def sentence_encoder(self, sentence, pos1, pos2, total_shape):
+        # embedding layer
+
         embeds1 = self.word_embeddings(sentence)
         pos1_emb = self.pos1_embeddings(pos1)
         pos2_emb = self.pos2_embeddings(pos2)
         inputs = torch.cat([embeds1, pos1_emb, pos2_emb], 2)
 
-        tup, _ = self.lstm(
-            inputs)
+        # rnn layer Bi-GRU
+
+        tup, _ = self.lstm(inputs)
 
         tupf = tup[:, :, range(self.hidden_dim)]
         tupb = tup[:, :, range(self.hidden_dim, self.hidden_dim * 2)]
@@ -205,21 +219,17 @@ class RNN(nn.Module):
         tup = tup.contiguous()
 
         tup1 = F.tanh(tup).view(-1, self.hidden_dim)
+        tup1 = torch.matmul(tup1, self.attention_w).view(-1, self.max_sentence_size)
+        tup1 = F.softmax(tup1).view(-1, 1, self.max_sentence_size)
 
-        tup1 = torch.matmul(tup1, self.attention_w).view(-1, 70)
-
-        tup1 = F.softmax(tup1).view(-1, 1, 70)
-
+        # bag attention layer
         attention_r = torch.matmul(tup1, tup).view(-1, self.hidden_dim)
         sen_repre = []
         sen_alpha = []
         sen_s = []
         sen_out = []
-        self.loss = []
-        self.prob = []
-        self.prob2 = []
-        self.predictions = []
-        self.acc = []
+        prob = []
+        prob2 = []
 
         for i in range(len(total_shape) - 1):
             sen_repre.append(F.tanh(attention_r[total_shape[i]:total_shape[i + 1]]))
@@ -232,27 +242,36 @@ class RNN(nn.Module):
 
             sen_s.append(torch.matmul(sen_alpha[i], sen_repre[i]).view(self.hidden_dim, 1))
 
-            sen_out.append(torch.add(torch.matmul(self.relation_embedding, sen_s[i]).view(100), self.sen_d))
+            sen_out.append(
+                torch.add(torch.matmul(self.relation_embedding, sen_s[i]).view(self.relation_num), self.sen_d))
 
-            self.prob.append(F.softmax(sen_out[i]))
-            self.prob2.append(F.softmax(sen_out[i]).cpu().data.numpy())
+            prob.append(F.softmax(sen_out[i]))
+            prob2.append(F.softmax(sen_out[i]).cpu().data.numpy())
 
-            _, pre = torch.max(self.prob[i], 0)
-            self.predictions.append(pre)
+        return sen_out, prob, prob2
 
-            self.loss.append(
-                torch.mean(self.ls(sen_out[i], Variable(torch.from_numpy(y_batch[i].astype(np.float32))).cuda())))
+    def forward(self, sentence, pos1, pos2, total_shape, y_batch):
+        out, _, prob = self.sentence_encoder(sentence, pos1, pos2, total_shape)
 
-            if i == 0:
-                self.total_loss = self.loss[i]
-            else:
-                self.total_loss += self.loss[i]
+        loss = [torch.mean(self.ls(out[i], Variable(torch.from_numpy(y_batch[i].astype(np.float32))).cuda())) for i in
+                range(len(out))]
 
-            s = np.mean(np.equal(pre.cpu().data.numpy(), np.argmax(y_batch[i])).astype(float))
+        if len(loss) > 1:
+            total_loss = loss[0]
+            for lo in loss[1:]:
+                total_loss += lo
+        else:
+            total_loss = loss[0]
 
-            self.acc.append(s)
+        return total_loss, _, prob
 
-        return self.total_loss, self.acc, self.prob2
+    def gcn(self, sen_a, sen_b, sen_c):
+
+        return
+
+    def gcn_layer(self, h, r, t):
+
+        return
 
 
 if __name__ == "__main__":
@@ -260,5 +279,5 @@ if __name__ == "__main__":
     inp1 = Variable(torch.LongTensor(np.random.randint(0, 100, (100, 1))))
     bag_sen = np.asarray([np.random.randint(0, 100, (100, 1)) for _ in range(13)])
     bag = Variable(torch.LongTensor(bag_sen)).view(13, 100)
-    out = model(bag)
-    print(out)
+    o = model(bag)
+    print(o)
