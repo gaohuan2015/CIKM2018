@@ -250,6 +250,20 @@ class RNN(nn.Module):
 
         return sen_out, prob, prob2
 
+    def s_forward(self, out, y_batch):
+
+        loss = [torch.mean(self.ls(out[i], Variable(torch.from_numpy(y_batch[i].astype(np.float32))).cuda())) for i in
+                range(len(out))]
+
+        if len(loss) > 1:
+            total_loss = loss[0]
+            for lo in loss[1:]:
+                total_loss += lo
+        else:
+            total_loss = loss[0]
+
+        return total_loss
+
     def forward(self, sentence, pos1, pos2, total_shape, y_batch):
         out, _, prob = self.sentence_encoder(sentence, pos1, pos2, total_shape)
 
@@ -265,7 +279,9 @@ class RNN(nn.Module):
 
         return total_loss, _, prob
 
-    def gcn(self, sen_a, sen_b, sen_c):
+    def path_add(self, sen_a, sen_b, sen_c):
+
+        #
 
         return
 
