@@ -102,14 +102,6 @@ def build_data(train_hrt_bags, word2id, relation2id, list_size=70):
     return data, label, pos1, pos2, bag2id
 
 
-# transform text data into torch.Tensor format
-def torch_format(data, label, pos):
-    data = torch.LongTensor(np.asarray(data))
-    pos = torch.LongTensor(np.asarray(pos))
-
-    return data, label, pos
-
-
 # load pre-trained word embedding model in .bin or .vec format, and transform it into torch.embedding format
 def load_word_embedding(path="../data/vec4.bin"):
     # word2vec
@@ -141,11 +133,13 @@ def load_word_embedding_txt(path="../data/vec.txt"):
         content = [(float)(i) for i in content]
         vec.append(content)
     f.close()
+    word2id['ZERO'] = len(word2id)
     word2id['UNK'] = len(word2id)
     word2id['BLANK'] = len(word2id)
 
     dim = len(vec[0])
 
+    vec.append(np.zeros(dim))
     vec.append(np.random.normal(size=dim, loc=0, scale=0.05))
     vec.append(np.random.normal(size=dim, loc=0, scale=0.05))
     vec = np.array(vec, dtype=np.float32)
@@ -368,7 +362,7 @@ def init():
 
     path_id = build_path(train_ht_relation, train_hrt_bags, train_head_set, train_tail_set, bag2id)
 
-    fake_bag = [[id2["UNK"] for _ in range(70)]]
+    fake_bag = [[id2["ZERO"] for _ in range(70)]]
     fake_label = to_categorical([relation2id["NA"]], 100)
     fake_pos1 = [[pos_embed(i) for i in range(70)]]
     fake_pos2 = [[pos_embed(i) for i in range(70)]]
