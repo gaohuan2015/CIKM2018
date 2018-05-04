@@ -40,7 +40,7 @@ def train(word2vec, batch_size=50):
 
     optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=0.0001)
 
-    for epoch in range(5):
+    for epoch in range(10):
 
         temp_order = list(range(len(train_bag)))
 
@@ -75,14 +75,18 @@ def train(word2vec, batch_size=50):
             for j in range(len(batch_length)):
                 shape.append(shape[j] + batch_length[j])
 
-            loss_0, _, _ = model(seq_word, seq_pos1, seq_pos2, shape, batch_label)
+            sen_0, _, _ = model.sentence_encoder(seq_word, seq_pos1, seq_pos2, shape)
+
+            loss_0 = model.s_forward(sen_0, y_batch=batch_label)
+
+            # loss_0, _, _ = model(seq_word, seq_pos1, seq_pos2, shape, batch_label)
 
             # 2. path encode
 
             # 2.1 path a encode
 
             batch_word = pa_bag[index]
-            batch_label = pa_label[index]
+            # batch_label = pa_label[index]
             batch_pos1 = pa_pos1[index]
             batch_pos2 = pa_pos2[index]
 
@@ -95,14 +99,15 @@ def train(word2vec, batch_size=50):
             for j in range(len(batch_length)):
                 shape.append(shape[j] + batch_length[j])
 
-            sen_a, _, _ = model.sentence_encoder(seq_word, seq_pos1, seq_pos2)
+            sen_a, _, _ = model.sentence_encoder(seq_word, seq_pos1, seq_pos2, shape)
 
-            loss_a, _, _ = model(seq_word, seq_pos1, seq_pos2, shape, batch_label)
+            # loss_a = model.s_forward(sen_a, y_batch=batch_label)
+            # loss_a, _, _ = model(seq_word, seq_pos1, seq_pos2, shape, batch_label)
 
             # 2.2 path b encode
 
             batch_word = pb_bag[index]
-            batch_label = pb_label[index]
+            # batch_label = pb_label[index]
             batch_pos1 = pb_pos1[index]
             batch_pos2 = pb_pos2[index]
 
@@ -115,11 +120,19 @@ def train(word2vec, batch_size=50):
             for j in range(len(batch_length)):
                 shape.append(shape[j] + batch_length[j])
 
-            loss_b, _, _ = model(seq_word, seq_pos1, seq_pos2, shape, batch_label)
+            sen_b, _, _ = model.sentence_encoder(seq_word, seq_pos1, seq_pos2, shape)
+
+            # loss_b, _, _ = model(seq_word, seq_pos1, seq_pos2, shape, batch_label)
 
             # all loss
 
-            loss = loss_0 + loss_a + loss_b
+            s = [sen_a[0] + sen_b[0] for i in range(batch_size)]
+
+            loss_path = model.s_forward(s, batch_label)
+
+            # loss = loss_0  # + loss_a + loss_b
+
+            loss = loss_0 + loss_path
 
             # target = Variable(torch.LongTensor(np.asarray(train_label[i]).reshape((1)))).cuda()
             # loss = loss_function(outputs, target)
@@ -200,8 +213,8 @@ def eval(model, bag, label, pos1, pos2, batch_size=10):
     plt.plot(recall[:], precision[:], lw=2, color='navy', label='BGRU+2ATT')
     plt.xlabel('Recall')
     plt.ylabel('Precision')
-    plt.ylim([0.0, 1.0])
-    plt.xlim([0.0, 0.4])
+    plt.ylim([0.4, 1.0])
+    plt.xlim([0.0, 0.5])
     plt.title('Precision-Recall Area={0:0.2f}'.format(average_precision))
     plt.legend(loc="upper right")
     plt.grid(True)
@@ -213,8 +226,8 @@ def eval(model, bag, label, pos1, pos2, batch_size=10):
 if __name__ == "__main__":
     word2vec = np.load("../data/word2vec.npy")
 
-    # train(word2vec)
+    train(word2vec)
     test_bag, test_label, test_pos1, test_pos2 = load_test()
 
-    model = torch.load("../data/model/sentence_model_0")
+    model = torch.load("../data/model/sentence_model_1")
     eval(model, test_bag, test_label, test_pos1, test_pos2)
