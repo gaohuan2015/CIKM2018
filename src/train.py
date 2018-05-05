@@ -226,8 +226,8 @@ def eval(model, bag, label, pos1, pos2, batch_size=10):
 if __name__ == "__main__":
     word2vec = np.load("../data/word2vec.npy")
 
-    train(word2vec)
+    # train(word2vec)
     test_bag, test_label, test_pos1, test_pos2 = load_test()
 
-    model = torch.load("../data/model/sentence_model_1")
+    model = torch.load("../data/model/sentence_model_9")
     eval(model, test_bag, test_label, test_pos1, test_pos2)
