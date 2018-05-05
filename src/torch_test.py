@@ -12,6 +12,7 @@ import torch.optim as optim
 # lookup_tensor = torch.LongTensor([[0, 1], [1,1]])
 # hello_embed = embeds(autograd.Variable(lookup_tensor))
 # print(hello_embed)
+from gensim.models import word2vec
 from torch.autograd import Variable
 
 # import torch
@@ -48,20 +49,13 @@ from torch.autograd import Variable
 # c = torch.ones(15, 300)
 # pad_sequence([a, b, c]).size()
 # torch.Size([25, 3, 300])
+from src.load import load_word_embedding_txt
+from src.model import RNN
 
+id2, word2vec = load_word_embedding_txt()
 
-x = Variable(torch.ones(2, 2), requires_grad=True)
-print(x)
+fake_bag = [[id2["ZERO"] for _ in range(70)]]
 
-y = x + 2
-print(y)
-
-z = y * y * 3
-out = z.mean()
-
-print(z, out)
-
-
-out.backward()
+rnn = RNN(len(word2vec[0]), 200, len(word2vec), word2vec, 50)
 
 print("end")
