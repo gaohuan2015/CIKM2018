@@ -20,7 +20,7 @@ def pos_embed(x):
 
 
 # load data from .txt file
-def build_data(train_hrt_bags, word2id, relation2id, list_size=70):
+def build_data(train_hrt_bags, word2id, entity2id, list_size=70):
     # 找出所有一个实体对不止一个关系的数据
     # for k,v in train_ht_relation.items():
     #     if len(v) > 1:
@@ -33,14 +33,18 @@ def build_data(train_hrt_bags, word2id, relation2id, list_size=70):
     label = list()
     pos1 = list()
     pos2 = list()
+    entity = list()
     for key, value in train_hrt_bags.items():
 
         bag_text = list()
         bag_pos1 = list()
         bag_pos2 = list()
-        bag2id.append(key)
 
         e1, e2, relation = key
+
+        entity.append([entity2id[e1], entity2id[e2]])
+        bag2id.append(key)
+        label.append(relation)
 
         for s_instance in value:
             s_list = s_instance.strip().split()
@@ -95,11 +99,10 @@ def build_data(train_hrt_bags, word2id, relation2id, list_size=70):
         data.append(bag_text)
         pos1.append(bag_pos1)
         pos2.append(bag_pos2)
-        label.append(relation)
 
     # print(data_check(data, label, pos))
 
-    return data, label, pos1, pos2, bag2id
+    return data, label, pos1, pos2, bag2id, entity
 
 
 # load pre-trained word embedding model in .bin or .vec format, and transform it into torch.embedding format
@@ -157,7 +160,9 @@ def data_collection(path, relation2id):
     train_hrt_bags = dict()  # key:(e1, e2, r) string value:sentence list
     train_head_set = dict()  # key(e) string value: tail list
     train_tail_set = dict()
-    # entity_mention_map = dict()
+    entity_set = set()
+
+    entity2id = dict()
 
     for s in sentences:
 
@@ -189,6 +194,9 @@ def data_collection(path, relation2id):
 
         r_id = relation2id[r_mention] if r_mention in relation2id.keys() else relation2id["NA"]
 
+        entity_set.add(e1_mention)
+        entity_set.add(e2_mention)
+
         # fill train (h,t) dict
         if entity_mention(e1_mention, e2_mention) in train_ht_relation.keys():
             train_ht_relation[entity_mention(e1_mention, e2_mention)].add(r_id)
@@ -217,7 +225,10 @@ def data_collection(path, relation2id):
             train_tail_set[e2_mention] = set()
             train_tail_set[e2_mention].add(e1_mention)
 
-    return train_ht_relation, train_hrt_bags, train_head_set, train_tail_set
+    for eid, val in enumerate(list(entity_set)):
+        entity2id[val] = eid
+
+    return train_ht_relation, train_hrt_bags, train_head_set, train_tail_set, entity2id
 
 
 def data_check(data, label, pos):
@@ -350,7 +361,8 @@ def init():
     id2, val = load_word_embedding_txt()
     relation2id = relation_id(relation2id_path)
 
-    train_ht_relation, train_hrt_bags, train_head_set, train_tail_set = data_collection(train_data_path, relation2id)
+    train_ht_relation, train_hrt_bags, train_head_set, train_tail_set, entity2id = data_collection(train_data_path,
+                                                                                                   relation2id)
 
     # f = open("../data/np/train_q&a.txt", "w", encoding="utf-8")
     #
@@ -358,7 +370,7 @@ def init():
     # for key, value in train_hrt_bags.items():
     #     f.write(str(i) + '\t' + str(key[0]) + '\t' + str(key[1]) + '\t' + str(key[2]) + '\n')
 
-    data, label, pos1, pos2, bag2id = build_data(train_hrt_bags, id2, relation2id)
+    data, label, pos1, pos2, bag2id, entity = build_data(train_hrt_bags, id2, entity2id)
 
     path_id = build_path(train_ht_relation, train_hrt_bags, train_head_set, train_tail_set, bag2id)
 
@@ -419,15 +431,17 @@ def init():
     np.save("../data/np/train_label.npy", to_categorical(np.asarray(label)))
     np.save("../data/np/train_pos1.npy", np.asarray(pos1))
     np.save("../data/np/train_pos2.npy", np.asarray(pos2))
+    np.save("../data/np/train_entity.npy", np.asarray(entity))
 
-    _, test_hrt_bags, _, _ = data_collection(test_data_path, relation2id)
+    _, test_hrt_bags, _, _, entity2id = data_collection(test_data_path, relation2id)
 
-    data, label, pos1, pos2, bag2id = build_data(test_hrt_bags, id2, relation2id)
+    data, label, pos1, pos2, bag2id, entity = build_data(test_hrt_bags, id2, entity2id)
 
     np.save("../data/np/test_bag.npy", np.asarray(data))
     np.save("../data/np/test_label.npy", to_categorical(np.asarray(label)))
     np.save("../data/np/test_pos1.npy", np.asarray(pos1))
     np.save("../data/np/test_pos2.npy", np.asarray(pos2))
+    np.save("../data/np/test_entity.npy", np.array(entity))
 
 
 def load_all_data():
@@ -449,13 +463,14 @@ def load_train():
     train_label = np.load("../data/np/train_label.npy")
     train_pos1 = np.load("../data/np/train_pos1.npy")
     train_pos2 = np.load("../data/np/train_pos2.npy")
+    train_entity = np.load("../data/np/train_entity.npy")
 
     # train_bag = np.load("../data/data/small_word.npy")
     # train_label = np.load("../data/data/small_y.npy")
     # train_pos1 = np.load("../data/data/small_pos1.npy")
     # train_pos2 = np.load("../data/data/small_pos2.npy")
 
-    return train_bag, train_label, train_pos1, train_pos2
+    return train_bag, train_label, train_pos1, train_pos2, train_entity
 
 
 def load_train_path():
@@ -477,13 +492,14 @@ def load_test():
     test_label = np.load("../data/np/test_label.npy")
     test_pos1 = np.load("../data/np/test_pos1.npy")
     test_pos2 = np.load("../data/np/test_pos2.npy")
+    test_entity = np.load("../data/np/test_entity.npy")
 
     # test_bag = np.load("../data/data/testall_word.npy")
     # test_label = np.load("../data/data/testall_y.npy")
     # test_pos1 = np.load("../data/data/testall_pos1.npy")
     # test_pos2 = np.load("../data/data/testall_pos2.npy")
 
-    return test_bag, test_label, test_pos1, test_pos2
+    return test_bag, test_label, test_pos1, test_pos2,test_entity
 
 
 # 对数据进行采样，根据关系的数量，来选定每个关系的比例。
