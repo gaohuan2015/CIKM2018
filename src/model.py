@@ -163,6 +163,7 @@ class RNN(nn.Module):
         self.max_sentence_size = 70
         self.pos_size = 120
         self.hidden_dim = 200
+        self.entity_size = 38000
 
         self.big_num = big_num
         self.hidden_dim = hidden_dim
@@ -177,11 +178,17 @@ class RNN(nn.Module):
         nn.init.normal(self.pos2_embeddings.weight)
         # nn.init.xavier_uniform(self.pos2_embeddings.weight)
 
+        self.entity_embeddings = nn.Embedding(self.entity_size, self.kernel_num)
+        nn.init.normal(self.entity_embeddings.weight)
+
         self.lstm = nn.GRU(embedding_dim + 10, hidden_dim, bidirectional=True, dropout=0.2, batch_first=True)
         # self.bilinear=nn.Linear(hidden_dim*2,hidden_dim)
 
         self.attention_w = Variable(torch.FloatTensor(hidden_dim, 1), requires_grad=True).cuda()
         nn.init.xavier_uniform(self.attention_w)
+
+        self.W = Variable(torch.FloatTensor(hidden_dim, hidden_dim), requires_grad=True).cuda()
+        nn.init.normal(self.W)
 
         self.sen_a = Variable(torch.FloatTensor(hidden_dim), requires_grad=True).cuda()
         nn.init.normal(self.sen_a)
@@ -191,15 +198,20 @@ class RNN(nn.Module):
         nn.init.normal(self.sen_r)
         # nn.init.xavier_uniform(self.sen_r)
 
-        self.relation_embedding = Variable(torch.FloatTensor(100, hidden_dim), requires_grad=True).cuda()
+        self.relation_embedding = Variable(torch.FloatTensor(hidden_dim, 100), requires_grad=True).cuda()
         nn.init.normal(self.relation_embedding)
         # nn.init.xavier_uniform(self.relation_embedding)
+
+        self.relation_embedding2 = Variable(torch.FloatTensor(3 * hidden_dim, 100), requires_grad=True).cuda()
+        nn.init.normal(self.relation_embedding2)
 
         self.sen_d = Variable(torch.FloatTensor(100), requires_grad=True).cuda()
         nn.init.normal(self.sen_d)
         # nn.init.xavier_uniform(self.sen_d)
 
         self.ls = nn.BCEWithLogitsLoss()
+
+        self.ce = nn.CrossEntropyLoss()
 
     def sentence_encoder(self, sentence, pos1, pos2, total_shape):
         # embedding layer
@@ -242,27 +254,54 @@ class RNN(nn.Module):
 
             sen_s.append(torch.matmul(sen_alpha[i], sen_repre[i]).view(self.hidden_dim, 1))
 
-            sen_out.append(
-                torch.add(torch.matmul(self.relation_embedding, sen_s[i]).view(self.relation_num), self.sen_d))
+            # sen_out.append(
+            #     torch.add(torch.matmul(sen_s[i], self.relation_embedding).view(self.relation_num), self.sen_d))
 
-            prob.append(F.softmax(sen_out[i]))
-            prob2.append(F.softmax(sen_out[i]).cpu().data.numpy())
+            # prob.append(F.softmax(sen_out[i]))
+            # prob2.append(F.softmax(sen_out[i]).cpu().data.numpy())
 
-        return sen_out, prob, prob2
+        return sen_out, sen_s, prob2
+
+    def entity_encoder(self, entity, sen, batch_label):
+        embeds1 = self.entity_embeddings(entity).view(-1, 2 * self.kernel_num)
+
+        N = torch.cat((embeds1, sen), 1).view(-1, 3, self.kernel_num)
+
+        # A = Variable(torch.FloatTensor(np.array([[1, 0, 1], [0, 0, 0], [0, 0, 1]]))).cuda()
+
+        # t = torch.matmul(A, N)
+
+        o = torch.matmul(N, self.W)
+
+        o = F.relu(o).view(-1, 3 * self.kernel_num)
+
+        o = torch.add(torch.matmul(o, self.relation_embedding2).view(-1, self.relation_num), self.sen_d)
+
+        prob = F.softmax(o, 1).cpu().data.numpy()
+
+        loss = self.ls(o, Variable(torch.FloatTensor(batch_label)).cuda())
+
+        return loss, prob
 
     def s_forward(self, out, y_batch):
 
-        loss = [torch.mean(self.ls(out[i], Variable(torch.from_numpy(y_batch[i].astype(np.float32))).cuda())) for i in
-                range(len(out))]
+        o = torch.add(torch.matmul(out, self.relation_embedding).view(-1, self.relation_num), self.sen_d)
 
-        if len(loss) > 1:
-            total_loss = loss[0]
-            for lo in loss[1:]:
-                total_loss += lo
-        else:
-            total_loss = loss[0]
+        prob = F.softmax(o, 1).cpu().data.numpy()
 
-        return total_loss
+        total_loss = self.ce(o, Variable(torch.LongTensor(np.argmax(y_batch, 1))).cuda())
+
+        # loss = [torch.mean(self.ls(out[i], Variable(torch.from_numpy(y_batch[i].astype(np.float32))).cuda())) for i in
+        #         range(len(out))]
+        #
+        # if len(loss) > 1:
+        #     total_loss = loss[0]
+        #     for lo in loss[1:]:
+        #         total_loss += lo
+        # else:
+        #     total_loss = loss[0]
+
+        return total_loss, prob
 
     def forward(self, sentence, pos1, pos2, total_shape, y_batch):
         out, _, prob = self.sentence_encoder(sentence, pos1, pos2, total_shape)
@@ -285,7 +324,7 @@ class RNN(nn.Module):
 
         return
 
-    def gcn_layer(self, h, r, t):
+    def gcn_layer(self, out, ht):
 
         return
 
