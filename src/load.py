@@ -161,6 +161,7 @@ def data_collection(path, relation2id):
     train_head_set = dict()  # key(e) string value: tail list
     train_tail_set = dict()
     entity_set = set()
+    entity_id_set = set()
 
     entity2id = dict()
 
@@ -186,6 +187,9 @@ def data_collection(path, relation2id):
 
         e1_id = s_list[0]
         e2_id = s_list[1]
+
+        entity_id_set.add(e1_id)
+        entity_id_set.add(e2_id)
 
         e1_mention = s_list[2]
         e2_mention = s_list[3]
@@ -227,6 +231,11 @@ def data_collection(path, relation2id):
 
     for eid, val in enumerate(list(entity_set)):
         entity2id[val] = eid
+
+    with codecs.open("../data/np/entity_id_map.txt", "w", encoding="utf-8") as f:
+
+        for key in entity_id_set:
+            f.write(str(key) + "\n")
 
     return train_ht_relation, train_hrt_bags, train_head_set, train_tail_set, entity2id
 
@@ -364,6 +373,10 @@ def init():
     train_ht_relation, train_hrt_bags, train_head_set, train_tail_set, entity2id = data_collection(train_data_path,
                                                                                                    relation2id)
 
+    with codecs.open("../data/np/entity2id.txt", "w", encoding="utf-8") as f:
+        for key, value in entity2id.items():
+            f.write(str(key) + '\t' + str(value) + '\n')
+
     # f = open("../data/np/train_q&a.txt", "w", encoding="utf-8")
     #
     # i = 0
@@ -499,7 +512,7 @@ def load_test():
     # test_pos1 = np.load("../data/data/testall_pos1.npy")
     # test_pos2 = np.load("../data/data/testall_pos2.npy")
 
-    return test_bag, test_label, test_pos1, test_pos2,test_entity
+    return test_bag, test_label, test_pos1, test_pos2, test_entity
 
 
 # 对数据进行采样，根据关系的数量，来选定每个关系的比例。
