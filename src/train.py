@@ -10,7 +10,8 @@ import numpy as np
 import torch.optim as optim
 
 from src.load import load_word_embedding, relation_id, build_data, data_collection, load_all_data, to_categorical, \
-    shuffle, load_train, load_test, load_word_embedding_txt, load_train_path
+    shuffle, load_train, load_test, load_word_embedding_txt, load_train_path, load_test_path, load_train_kg, \
+    load_test_kg
 
 from src.model import Encoder, RNN
 
@@ -23,16 +24,17 @@ if cuda:
     torch.cuda.manual_seed(1)
 
 
-def train(word2vec, batch_size=50):
+def train(word2vec, entity2vec, kg_re2vec, batch_size=50):
     train_bag, train_label, train_pos1, train_pos2, train_entity = load_train()
-    pa_bag, pa_label, pa_pos1, pa_pos2, pb_bag, pb_label, pb_pos1, pb_pos2 = load_train_path()
+    pa_bag, pa_label, pa_pos1, pa_pos2, pb_bag, pb_label, pb_pos1, pb_pos2, mid_entity = load_train_path()
+    kg_mid_entity, kg_path_relation = load_train_kg()
 
     pa_label = pa_label.reshape((-1, 100))
     pb_label = pb_label.reshape((-1, 100))
     # test_bag, test_label, test_pos1, test_pos2 = load_test()
 
-    # model = torch.load("../data/model/sentence_model_4")
-    model = RNN(len(word2vec[0]), 200, len(word2vec), word2vec, 50)
+    model = torch.load("../data/model/sentence_model_4")
+    # model = RNN(word2vec, entity2vec, kg_re2vec, 100, 50)
 
     if cuda:
         model.cuda()
@@ -40,7 +42,7 @@ def train(word2vec, batch_size=50):
 
     optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=0.0001)
 
-    for epoch in range(5):
+    for epoch in range(10):
 
         temp_order = list(range(len(train_bag)))
 
@@ -67,7 +69,6 @@ def train(word2vec, batch_size=50):
             batch_entity = train_entity[index]
 
             seq_word = Variable(torch.LongTensor(np.array([s for bag in batch_word for s in bag]))).cuda()
-            # seq_label = np.array([s for bag in batch_label for s in bag])
             seq_pos1 = Variable(torch.LongTensor(np.array([s for bag in batch_pos1 for s in bag]))).cuda()
             seq_pos2 = Variable(torch.LongTensor(np.array([s for bag in batch_pos2 for s in bag]))).cuda()
             seq_entity = Variable(torch.LongTensor(np.array(batch_entity))).cuda()
@@ -80,9 +81,11 @@ def train(word2vec, batch_size=50):
             _, sen_0, _ = model.sentence_encoder(seq_word, seq_pos1, seq_pos2, shape)
             sen_0 = torch.stack(sen_0)
             sen_0 = torch.squeeze(sen_0)
-            # loss_0, _ = model.entity_encoder(seq_entity, sen_0, batch_label)
             #
-            loss_0, _ = model.s_forward(sen_0, y_batch=batch_label)
+            # loss_0, _ = model.s_forward(sen_0, seq_entity, y_batch=batch_label)
+
+            # loss_0, _ = model.entity_encoder(seq_word, seq_pos1, seq_pos2, shape, seq_entity, batch_label)
+            #
 
             # loss_0, _, _ = model(seq_word, seq_pos1, seq_pos2, shape, batch_label)
 
@@ -90,44 +93,51 @@ def train(word2vec, batch_size=50):
 
             # 2.1 path a encode
 
-            # batch_word = pa_bag[index]
-            # batch_pos1 = pa_pos1[index]
-            # batch_pos2 = pa_pos2[index]
-            #
-            # seq_word = Variable(torch.LongTensor(np.array([s for bag in batch_word for s in bag]))).cuda()
-            # seq_pos1 = Variable(torch.LongTensor(np.array([s for bag in batch_pos1 for s in bag]))).cuda()
-            # seq_pos2 = Variable(torch.LongTensor(np.array([s for bag in batch_pos2 for s in bag]))).cuda()
-            #
-            # batch_length = [len(bag) for bag in batch_word]
-            # shape = [0]
-            # for j in range(len(batch_length)):
-            #     shape.append(shape[j] + batch_length[j])
-            #
-            # sen_a, _, _ = model.sentence_encoder(seq_word, seq_pos1, seq_pos2, shape)
+            batch_word = pa_bag[index]
+            batch_pos1 = pa_pos1[index]
+            batch_pos2 = pa_pos2[index]
+
+            seq_word = Variable(torch.LongTensor(np.array([s for bag in batch_word for s in bag]))).cuda()
+            seq_pos1 = Variable(torch.LongTensor(np.array([s for bag in batch_pos1 for s in bag]))).cuda()
+            seq_pos2 = Variable(torch.LongTensor(np.array([s for bag in batch_pos2 for s in bag]))).cuda()
+
+            batch_length = [len(bag) for bag in batch_word]
+            shape = [0]
+            for j in range(len(batch_length)):
+                shape.append(shape[j] + batch_length[j])
+
+            _, sen_a, _ = model.sentence_encoder(seq_word, seq_pos1, seq_pos2, shape)
+            sen_a = torch.stack(sen_a)
+            sen_a = torch.squeeze(sen_a)
 
             # loss_a = model.s_forward(sen_a, y_batch=batch_label)
             # loss_a, _, _ = model(seq_word, seq_pos1, seq_pos2, shape, batch_label)
 
             # 2.2 path b encode
 
-            # batch_word = pb_bag[index]
-            # batch_pos1 = pb_pos1[index]
-            # batch_pos2 = pb_pos2[index]
-            #
-            # seq_word = Variable(torch.LongTensor(np.array([s for bag in batch_word for s in bag]))).cuda()
-            # seq_pos1 = Variable(torch.LongTensor(np.array([s for bag in batch_pos1 for s in bag]))).cuda()
-            # seq_pos2 = Variable(torch.LongTensor(np.array([s for bag in batch_pos2 for s in bag]))).cuda()
-            #
-            # batch_length = [len(bag) for bag in batch_word]
-            # shape = [0]
-            # for j in range(len(batch_length)):
-            #     shape.append(shape[j] + batch_length[j])
-            #
-            # sen_b, _, _ = model.sentence_encoder(seq_word, seq_pos1, seq_pos2, shape)
+            batch_word = pb_bag[index]
+            batch_pos1 = pb_pos1[index]
+            batch_pos2 = pb_pos2[index]
+
+            seq_word = Variable(torch.LongTensor(np.array([s for bag in batch_word for s in bag]))).cuda()
+            seq_pos1 = Variable(torch.LongTensor(np.array([s for bag in batch_pos1 for s in bag]))).cuda()
+            seq_pos2 = Variable(torch.LongTensor(np.array([s for bag in batch_pos2 for s in bag]))).cuda()
+
+            batch_length = [len(bag) for bag in batch_word]
+            shape = [0]
+            for j in range(len(batch_length)):
+                shape.append(shape[j] + batch_length[j])
+
+            _, sen_b, _ = model.sentence_encoder(seq_word, seq_pos1, seq_pos2, shape)
+            sen_b = torch.stack(sen_b)
+            sen_b = torch.squeeze(sen_b)
 
             # loss_b, _, _ = model(seq_word, seq_pos1, seq_pos2, shape, batch_label)
 
             # all loss
+
+            batch_mid_entity = mid_entity[index]
+            seq_mid_entity = Variable(torch.LongTensor(np.array([s for s in batch_mid_entity]))).cuda()
 
             # s = [sen_a[0] + sen_b[0] for i in range(batch_size)]
             #
@@ -135,7 +145,15 @@ def train(word2vec, batch_size=50):
 
             # loss = loss_0  # + loss_a + loss_b
 
-            loss = loss_0  # + 0.1 * loss_path
+            batch_kg_mid_entity = kg_mid_entity[index]
+            seq_kg_mid_entity = Variable(torch.LongTensor(np.array([s for s in batch_kg_mid_entity]))).cuda()
+
+            batch_kg_relation = kg_path_relation[index]
+            seq_kg_relation = Variable(torch.LongTensor(np.array([s for s in batch_kg_relation]))).cuda()
+
+            loss, prob = model.gcn_layer(sen_0, sen_a, sen_b, seq_entity, seq_mid_entity, seq_kg_mid_entity,
+                                         seq_kg_relation, batch_label)
+            # loss = loss_0  # + 0.1 * loss_path
 
             # target = Variable(torch.LongTensor(np.asarray(train_label[i]).reshape((1)))).cuda()
             # loss = loss_function(outputs, target)
@@ -160,9 +178,13 @@ def train(word2vec, batch_size=50):
         torch.save(model, "../data/model/sentence_model_%s" % (str(epoch)))
 
 
-def eval(model, bag, label, pos1, pos2, entity, batch_size=10):
+def eval(model, batch_size=10):
     if cuda:
         model.cuda()
+
+    bag, label, pos1, pos2, entity = load_test()
+    pa_bag, pa_label, pa_pos1, pa_pos2, pb_bag, pb_label, pb_pos1, pb_pos2, mid_entity = load_test_path()
+    kg_mid_entity, kg_path_relation = load_test_kg()
 
     # model.eval()
 
@@ -189,14 +211,68 @@ def eval(model, bag, label, pos1, pos2, entity, batch_size=10):
         for j in range(len(batch_length)):
             shape.append(shape[j] + batch_length[j])
 
-        _, sen_0, _ = model.sentence_encoder(seq_word, seq_pos1, seq_pos2, shape)
-        sen_0 = torch.stack(sen_0)
-        sen_0 = torch.squeeze(sen_0)
+        # _, sen_0, _ = model.sentence_encoder(seq_word, seq_pos1, seq_pos2, shape)
+        # sen_0 = torch.stack(sen_0)
+        # sen_0 = torch.squeeze(sen_0)
+
+        # _, prob = model.s_forward(sen_0, y_batch=batch_label)
         # _, prob = model.entity_encoder(seq_entity, sen_0, batch_label)
 
         # _, _, prob = model(seq_word, seq_pos1, seq_pos2, shape, batch_label)
 
-        _, prob = model.s_forward(sen_0, y_batch=batch_label)
+        # base : loss0
+        _, sen_0, _ = model.sentence_encoder(seq_word, seq_pos1, seq_pos2, shape)
+        sen_0 = torch.stack(sen_0)
+        sen_0 = torch.squeeze(sen_0)
+
+        # path a
+        batch_word = pa_bag[i * batch_size:(i + 1) * batch_size]
+        batch_pos1 = pa_pos1[i * batch_size:(i + 1) * batch_size]
+        batch_pos2 = pa_pos2[i * batch_size:(i + 1) * batch_size]
+
+        seq_word = Variable(torch.LongTensor(np.array([s for bag in batch_word for s in bag]))).cuda()
+        seq_pos1 = Variable(torch.LongTensor(np.array([s for bag in batch_pos1 for s in bag]))).cuda()
+        seq_pos2 = Variable(torch.LongTensor(np.array([s for bag in batch_pos2 for s in bag]))).cuda()
+
+        batch_length = [len(bag) for bag in batch_word]
+        shape = [0]
+        for j in range(len(batch_length)):
+            shape.append(shape[j] + batch_length[j])
+
+        _, sen_a, _ = model.sentence_encoder(seq_word, seq_pos1, seq_pos2, shape)
+        sen_a = torch.stack(sen_a)
+        sen_a = torch.squeeze(sen_a)
+
+        # path b
+        batch_word = pb_bag[i * batch_size:(i + 1) * batch_size]
+        batch_pos1 = pb_pos1[i * batch_size:(i + 1) * batch_size]
+        batch_pos2 = pb_pos2[i * batch_size:(i + 1) * batch_size]
+
+        seq_word = Variable(torch.LongTensor(np.array([s for bag in batch_word for s in bag]))).cuda()
+        seq_pos1 = Variable(torch.LongTensor(np.array([s for bag in batch_pos1 for s in bag]))).cuda()
+        seq_pos2 = Variable(torch.LongTensor(np.array([s for bag in batch_pos2 for s in bag]))).cuda()
+
+        batch_length = [len(bag) for bag in batch_word]
+        shape = [0]
+        for j in range(len(batch_length)):
+            shape.append(shape[j] + batch_length[j])
+
+        _, sen_b, _ = model.sentence_encoder(seq_word, seq_pos1, seq_pos2, shape)
+        sen_b = torch.stack(sen_b)
+        sen_b = torch.squeeze(sen_b)
+
+        batch_kg_mid_entity = kg_mid_entity[i * batch_size:(i + 1) * batch_size]
+        seq_kg_mid_entity = Variable(torch.LongTensor(np.array([s for s in batch_kg_mid_entity]))).cuda()
+
+        batch_kg_relation = kg_path_relation[i * batch_size:(i + 1) * batch_size]
+        seq_kg_relation = Variable(torch.LongTensor(np.array([s for s in batch_kg_relation]))).cuda()
+
+        batch_mid_entity = mid_entity[i * batch_size:(i + 1) * batch_size]
+        seq_mid_entity = Variable(torch.LongTensor(np.array([s for s in batch_mid_entity]))).cuda()
+
+        _, prob = model.gcn_layer(sen_0, sen_a, sen_b, seq_entity, seq_mid_entity, seq_kg_mid_entity, seq_kg_relation,
+                                  batch_label)
+
         print(i)
 
         for single_prob in prob:
@@ -221,6 +297,9 @@ def eval(model, bag, label, pos1, pos2, entity, batch_size=10):
     average_precision = average_precision_score(alleval[:len(allprob)], allprob)
     print('test average precision' + str(average_precision))
 
+    np.save("../data/test_data/eval.npy", np.array(alleval))
+    np.save("../data/test_data/prob.npy", np.array(allprob))
+
     plt.plot(recall[:], precision[:], lw=2, color='navy', label='BGRU+2ATT')
     plt.xlabel('Recall')
     plt.ylabel('Precision')
@@ -236,9 +315,31 @@ def eval(model, bag, label, pos1, pos2, entity, batch_size=10):
 
 if __name__ == "__main__":
     word2vec = np.load("../data/word2vec.npy")
+    kg_re2vec = np.load("../data/kg_emb/kg_re_embedding.npy")
+    entity2vec = np.load("../data/kg_emb/entity_embedding.npy")
 
-    # train(word2vec)
-    test_bag, test_label, test_pos1, test_pos2, test_entity = load_test()
+    # train(word2vec, entity2vec, kg_re2vec)
 
-    model = torch.load("../data/model/sentence_model_2")
-    eval(model, test_bag, test_label, test_pos1, test_pos2, test_entity)
+    # model = torch.load("../data/model/sentence_model_0")
+    # eval(model)
+    # model = torch.load("../data/model/sentence_model_1")
+    # eval(model)
+    # model = torch.load("../data/model/sentence_model_2")
+    # eval(model)
+    # model = torch.load("../data/model/sentence_model_3")
+    # eval(model)
+    # model = torch.load("../data/model/sentence_model_4")
+    # eval(model)
+    # model = torch.load("../data/model/sentence_model_5")
+    # eval(model)
+    # model = torch.load("../data/model/sentence_model_6")
+    # eval(model)
+    model = torch.load("../data/model/sentence_model_7")
+    eval(model)
+    # model = torch.load("../data/model/sentence_model_8")
+    # eval(model)
+    # model = torch.load("../data/model/sentence_model_9")
+    # eval(model)
+
+
+

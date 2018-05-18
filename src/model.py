@@ -148,28 +148,32 @@ class Encoder(nn.Module):
 
 
 class RNN(nn.Module):
-    def __init__(self, embedding_dim, hidden_dim, vocab_size, pre_emb, big_num):
+    def __init__(self, word2vec, entity2vec, kg_re2vec, hidden_dim, big_num):
         super(RNN, self).__init__()
+
+        embedding_dim = word2vec.shape[1]
+        vocab_size = word2vec.shape[0]
 
         # hyper-parameters
         self.word_embedding_size = 50
         self.sentence_representation = 50
         self.bag_size = 20
         self.windows_size = 3
-        self.kernel_num = 200
-        self.vocabulary_size = pre_emb.shape[0]
+        self.kernel_num = hidden_dim
+        self.vocabulary_size = word2vec.shape[0]
         self.pos_embedding_size = 5
         self.relation_num = 100
         self.max_sentence_size = 70
         self.pos_size = 120
         self.hidden_dim = 200
         self.entity_size = 38000
+        self.entity_embedding_size = entity2vec.shape[1]
 
         self.big_num = big_num
         self.hidden_dim = hidden_dim
 
         self.word_embeddings = nn.Embedding(vocab_size, embedding_dim)
-        self.word_embeddings.weight = nn.Parameter(torch.from_numpy(pre_emb))
+        self.word_embeddings.weight = nn.Parameter(torch.from_numpy(word2vec))
 
         self.pos1_embeddings = nn.Embedding(123, 5)
         # nn.init.xavier_uniform(self.pos1_embeddings.weight)
@@ -178,8 +182,11 @@ class RNN(nn.Module):
         nn.init.normal(self.pos2_embeddings.weight)
         # nn.init.xavier_uniform(self.pos2_embeddings.weight)
 
-        self.entity_embeddings = nn.Embedding(self.entity_size, self.kernel_num)
-        nn.init.normal(self.entity_embeddings.weight)
+        self.entity_embeddings = nn.Embedding(entity2vec.shape[0], entity2vec.shape[1])
+        self.entity_embeddings.weight = nn.Parameter(torch.from_numpy(entity2vec))
+
+        self.kg_re_embeddings = nn.Embedding(kg_re2vec.shape[0], kg_re2vec.shape[1])
+        self.kg_re_embeddings.weight = nn.Parameter(torch.from_numpy(kg_re2vec))
 
         self.lstm = nn.GRU(embedding_dim + 10, hidden_dim, bidirectional=True, dropout=0.2, batch_first=True)
         # self.bilinear=nn.Linear(hidden_dim*2,hidden_dim)
@@ -202,7 +209,8 @@ class RNN(nn.Module):
         nn.init.normal(self.relation_embedding)
         # nn.init.xavier_uniform(self.relation_embedding)
 
-        self.relation_embedding2 = Variable(torch.FloatTensor(3 * hidden_dim, 100), requires_grad=True).cuda()
+        self.relation_embedding2 = Variable(torch.FloatTensor(hidden_dim * 3 + 6 * self.entity_embedding_size, 100),
+                                            requires_grad=True).cuda()
         nn.init.normal(self.relation_embedding2)
 
         self.sen_d = Variable(torch.FloatTensor(100), requires_grad=True).cuda()
@@ -262,28 +270,40 @@ class RNN(nn.Module):
 
         return sen_out, sen_s, prob2
 
-    def entity_encoder(self, entity, sen, batch_label):
-        embeds1 = self.entity_embeddings(entity).view(-1, 2 * self.kernel_num)
+    def entity_encoder(self, seq_word, seq_pos1, seq_pos2, shape, seq_entity, batch_label):
 
-        N = torch.cat((embeds1, sen), 1).view(-1, 3, self.kernel_num)
+        _, sen_0, _ = self.sentence_encoder(seq_word, seq_pos1, seq_pos2, shape)
+
+        sen_0 = torch.stack(sen_0)
+        sen_0 = torch.squeeze(sen_0)
+
+        embeds1 = self.entity_embeddings(seq_entity).view(-1, 2 * 100)
+        #
+        N = torch.cat([embeds1, sen_0.view(-1, self.kernel_num)], 1)
+
+        N = F.relu(N)
 
         # A = Variable(torch.FloatTensor(np.array([[1, 0, 1], [0, 0, 0], [0, 0, 1]]))).cuda()
 
         # t = torch.matmul(A, N)
 
-        o = torch.matmul(N, self.W)
+        # o = torch.matmul(N, self.W)
+        #
+        # o = F.relu(o).view(-1, 3 * self.kernel_num)
 
-        o = F.relu(o).view(-1, 3 * self.kernel_num)
-
-        o = torch.add(torch.matmul(o, self.relation_embedding2).view(-1, self.relation_num), self.sen_d)
+        o = torch.add(torch.matmul(N, self.relation_embedding2).view(-1, self.relation_num), self.sen_d)
 
         prob = F.softmax(o, 1).cpu().data.numpy()
 
-        loss = self.ls(o, Variable(torch.FloatTensor(batch_label)).cuda())
+        loss = self.ce(o, Variable(torch.LongTensor(np.argmax(batch_label, 1))).cuda())
 
         return loss, prob
 
-    def s_forward(self, out, y_batch):
+    def s_forward(self, out, entity, y_batch):
+
+        # embeds1 = self.entity_embeddings(entity).view(-1, 2 * self.entity_embedding_size)
+
+        # o = torch.cat((embeds1, out), 1)
 
         o = torch.add(torch.matmul(out, self.relation_embedding).view(-1, self.relation_num), self.sen_d)
 
@@ -324,9 +344,25 @@ class RNN(nn.Module):
 
         return
 
-    def gcn_layer(self, out, ht):
+    def gcn_layer(self, s, sa, sb, ht, e, kg_e, kg_r, batch_label):
 
-        return
+        emb_ht = self.entity_embeddings(ht).view(-1, 2 * 100)
+        emd_e = self.entity_embeddings(e).view(-1, 100)
+
+        emd_kg_e = self.entity_embeddings(kg_e).view(-1, 100)
+        emd_kg_r = self.kg_re_embeddings(kg_r).view(-1, 2*100)
+
+        N = torch.cat((emb_ht, emd_e, emd_kg_e, emd_kg_r, s, sa, sb), 1)
+
+        N = F.relu(N)
+
+        o = torch.add(torch.matmul(N, self.relation_embedding2).view(-1, self.relation_num), self.sen_d)
+
+        prob = F.softmax(o, 1).cpu().data.numpy()
+
+        loss = self.ce(o, Variable(torch.LongTensor(np.argmax(batch_label, 1))).cuda())
+
+        return loss, prob
 
 
 if __name__ == "__main__":
