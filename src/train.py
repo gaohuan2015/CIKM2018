@@ -11,12 +11,12 @@ import torch.optim as optim
 
 from src.load import load_word_embedding, relation_id, build_data, data_collection, load_all_data, to_categorical, \
     shuffle, load_train, load_test, load_word_embedding_txt, load_train_path, load_test_path, load_train_kg, \
-    load_test_kg
+    load_test_kg, set_noise
 
 from src.model import Encoder, RNN
 
 from torch.autograd import Variable
-from sklearn.metrics import accuracy_score, precision_recall_curve, average_precision_score
+from sklearn.metrics import accuracy_score, precision_recall_curve, average_precision_score, f1_score
 
 cuda = torch.cuda.is_available()
 
@@ -178,7 +178,7 @@ def train(word2vec, entity2vec, kg_re2vec, batch_size=50):
         torch.save(model, "../data/model/sentence_model_%s" % (str(epoch)))
 
 
-def eval(model, batch_size=10):
+def eval(model, noise=1, indices=1, batch_size=10):
     if cuda:
         model.cuda()
 
@@ -186,6 +186,13 @@ def eval(model, batch_size=10):
     pa_bag, pa_label, pa_pos1, pa_pos2, pb_bag, pb_label, pb_pos1, pb_pos2, mid_entity = load_test_path()
     kg_mid_entity, kg_path_relation = load_test_kg()
 
+    if noise != 1:
+        bag, label, pos1, pos2, entity = bag[indices], label[indices], pos1[indices], pos2[indices], entity[indices]
+        pa_bag, pa_label, pa_pos1, pa_pos2, pb_bag, pb_label, pb_pos1, pb_pos2, mid_entity = pa_bag[indices], pa_label[
+            indices], pa_pos1[indices], pa_pos2[indices], pb_bag[indices], pb_label[indices], pb_pos1[indices], pb_pos2[
+                                                                                                 indices], mid_entity[
+                                                                                                  indices]
+        kg_mid_entity, kg_path_relation = kg_mid_entity[indices], kg_path_relation[indices]
     # model.eval()
 
     # print('test %d instances with %d NA relation' % (len(bag), list(label).count(99)))
@@ -273,7 +280,6 @@ def eval(model, batch_size=10):
         _, prob = model.gcn_layer(sen_0, sen_a, sen_b, seq_entity, seq_mid_entity, seq_kg_mid_entity, seq_kg_relation,
                                   batch_label)
 
-        print(i)
 
         for single_prob in prob:
             allprob.append(single_prob[0:99])
@@ -300,6 +306,38 @@ def eval(model, batch_size=10):
     np.save("../data/test_data/eval.npy", np.array(alleval))
     np.save("../data/test_data/prob.npy", np.array(allprob))
 
+    order = np.argsort(-allprob)
+
+    num = 2000
+
+    top100 = order[:num]
+    correct_num_100 = 0.0
+    for i in top100:
+        if alleval[i] == 1:
+            correct_num_100 += 1.0
+    print(correct_num_100 / num)
+
+    num = 4000
+
+    top100 = order[:num]
+    correct_num_100 = 0.0
+    for i in top100:
+        if alleval[i] == 1:
+            correct_num_100 += 1.0
+    print(correct_num_100 / num)
+
+    num = 10000
+
+    top100 = order[:num]
+    correct_num_100 = 0.0
+    for i in top100:
+        if alleval[i] == 1:
+            correct_num_100 += 1.0
+    print(correct_num_100 / num)
+
+    # f1 = f1_score(alleval[:len(allprob)], allprob)
+    # print(f1)
+
     plt.plot(recall[:], precision[:], lw=2, color='navy', label='BGRU+2ATT')
     plt.xlabel('Recall')
     plt.ylabel('Precision')
@@ -310,7 +348,18 @@ def eval(model, batch_size=10):
     plt.grid(True)
     plt.savefig("../data/img/001.png")
 
-    return prob
+    return average_precision
+
+
+def test_noise(model_path):
+    model = torch.load(model_path)
+    s_75, s_85, s_95 = set_noise()
+
+    eval(model, noise=0.75, indices=s_75)
+    eval(model, noise=0.95, indices=s_85)
+    eval(model, noise=0.95, indices=s_95)
+
+    return
 
 
 if __name__ == "__main__":
@@ -319,6 +368,8 @@ if __name__ == "__main__":
     entity2vec = np.load("../data/kg_emb/entity_embedding.npy")
 
     # train(word2vec, entity2vec, kg_re2vec)
+
+    test_noise("../data/model/epoch-gcn-20-0.665-ce")
 
     # model = torch.load("../data/model/sentence_model_0")
     # eval(model)
@@ -334,12 +385,9 @@ if __name__ == "__main__":
     # eval(model)
     # model = torch.load("../data/model/sentence_model_6")
     # eval(model)
-    model = torch.load("../data/model/sentence_model_7")
-    eval(model)
+    # model = torch.load("../data/model/sentence_model_7")
+    # eval(model)
     # model = torch.load("../data/model/sentence_model_8")
     # eval(model)
     # model = torch.load("../data/model/sentence_model_9")
     # eval(model)
-
-
-

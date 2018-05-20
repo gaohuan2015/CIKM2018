@@ -709,6 +709,34 @@ def load_test_kg():
     return entity, rel
 
 
+def set_noise():
+    bag, label, pos1, pos2, entity = load_test()
+
+    # get index
+    label_0 = np.argmax(label, 1)
+    pos_label = []
+    neg_label = []
+    for i in range(len(label_0)):
+        if label_0[i] == 99:
+            neg_label.append(i)
+        else:
+            pos_label.append(i)
+
+    # 0.75
+    s_75 = random.sample(neg_label, int(len(neg_label) * 0.75))
+    a_75 = sorted(pos_label + s_75)
+
+    # 0.85
+    s_85 = random.sample(neg_label, int(len(neg_label) * 0.85))
+    a_85 = sorted(pos_label + s_85)
+
+    # 0.95
+    s_95 = random.sample(neg_label, int(len(neg_label) * 0.95))
+    a_95 = sorted(pos_label + s_95)
+
+    return a_75, a_85, a_95
+
+
 # 对数据进行采样，根据关系的数量，来选定每个关系的比例。
 def data_sample(relation_num=5, NA_ratio=0.1, NA_id=-1):
     relation2id = relation_id("../data/relation2id.txt")
@@ -826,5 +854,6 @@ if __name__ == "__main__":
     # data_sample()
 
     # a,b = load_word_embedding()
+    set_noise()
     init()
     print("end")
